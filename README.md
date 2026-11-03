@@ -16,10 +16,12 @@ works on its own.
   every widget reads it back, so nothing hard-codes a colour. Two ship: *Carbon / Copper* and *Deep Space*.
 - **Smooth at any scale.** Gradients and fills get the same one-pixel feathered edge egui gives its own shapes. Icons
   and logos stay SVG and are rasterized at the exact pixel size they're drawn at.
-- **A whole window.** Your own title bar (usable even above modal dialogs), an icon rail, a carded main panel, a
-  resizable side column, a status line and window resize edges, in one builder.
+- **A whole window, your layout.** Your own title bar (usable even above modal dialogs), an optional icon rail, a
+  carded main panel, resizable columns on the left, the right or both, a status line and window resize edges, in one
+  builder.
 - **A chat kit.** Conversation tabs, user bubbles, Markdown replies, collapsible thinking, a tool-call timeline, starters
-  for an empty chat and a composer with model and effort dropdowns. Your app keeps the conversations and the backend.
+  for an empty chat and a composer with model and effort dropdowns. It draws into any rectangle: a column on either
+  side, the main card, a window. Your app keeps the conversations and the backend.
 - **Plain data, plain functions.** Widgets are functions returning egui's `Response`; themes are structs. There is no
   framework to adopt.
 
@@ -58,7 +60,7 @@ impl eframe::App for App {
         let regions = Shell::new("My App")
             .logo(Icon::Orbit.svg())
             .rail(RAIL)
-            .side_column(&mut self.side, 320.0..=560.0)
+            .right_column(&mut self.side, 320.0..=560.0)
             .show(ui, &mut self.page);
 
         ui.scope_builder(egui::UiBuilder::new().max_rect(regions.main), |ui| {
@@ -112,13 +114,33 @@ The modules build on each other, from colours to whole windows. `cargo doc --ope
 
 | Module | Holds |
 |---|---|
-| [`theme`](src/theme/mod.rs) | `Theme`, `Palette`, `Metrics`, `Backdrop` and the fonts (`regular`, `semibold`, `mono`) |
+| [`theme`](src/theme/mod.rs) | `Theme`, `Palette`, `Metrics`, `Fonts`, `Backdrop`, and the font helpers `regular`, `semibold`, `mono` |
 | [`paint`](src/paint.rs) | Anti-aliased gradients, polygon fills, glows and a sparkle glyph |
 | [`art`](src/art/mod.rs) | The built-in `Icon` set (70 line icons) and your own `Svg` art, with window icons |
-| [`widgets`](src/widgets/mod.rs) | Buttons, pills, badges, chips, tabs, segmented controls, cards, metrics, a switch, a field and a slider |
-| [`shell`](src/shell/mod.rs) | The `Shell` builder, `RailItem` and the `Regions` it returns |
+| [`widgets`](src/widgets/mod.rs) | Buttons, pills, badges, chips, tabs, segmented controls, cards, metrics, a switch, a field, a slider, and the `Tone` they take |
+| [`shell`](src/shell/mod.rs) | The `Shell` builder (rail, left and right columns, status line), `RailItem` and the `Regions` it returns |
 | [`chat`](src/chat/mod.rs) | `ChatLayout`, `tab_strip`, transcript pieces, `Composer` and a Markdown renderer |
 | [`window`](src/window.rs) | An undecorated viewport, rounded corners on Windows 11 and screenshot runs |
+
+## Layout
+
+Only the title bar and the main card are always there. Add what you need:
+
+```rust,no_run
+# use spaceui::{Icon, RailItem, Shell};
+# fn ui(ui: &mut spaceui::egui::Ui, page: &mut usize, chat: &mut f32, outline: &mut f32) {
+# const RAIL: &[RailItem] = &[RailItem::page(Icon::Home, "Home")];
+let regions = Shell::new("My App")
+    .rail(RAIL)                               // optional; without it the cards take the space
+    .left_column(outline, 240.0..=400.0)      // optional
+    .right_column(chat, 320.0..=560.0)        // optional
+    .status_bar(22.0)                         // optional
+    .show(ui, page);
+// regions.main, regions.left, regions.right and regions.status are yours to fill.
+# }
+```
+
+![The chat in a left column, in the Deep Space theme](docs/screenshots/chat-left.png)
 
 ## Your own theme
 
@@ -142,6 +164,24 @@ let arctic = Theme {
 };
 assert_eq!(arctic.metrics, Theme::deep_space().metrics);
 ```
+
+Fonts are part of the theme too: Segoe UI from the system by default, egui's bundled fonts with `Fonts::BUNDLED`, or
+your own files:
+
+```rust
+use spaceui::theme::{FontFile, Fonts};
+
+# const INTER_REGULAR: &[u8] = &[];
+# const INTER_SEMIBOLD: &[u8] = &[];
+let fonts = Fonts {
+    regular: Some(FontFile::from_static("Inter", INTER_REGULAR)), // e.g. include_bytes!("Inter-Regular.ttf")
+    semibold: Some(FontFile::from_static("Inter Semibold", INTER_SEMIBOLD)),
+    ..Fonts::SYSTEM
+};
+# let _ = fonts;
+```
+
+For a one-off colour, status widgets take `Tone::Custom(color)` next to the palette's tones.
 
 ![Palette roles and the icon set](docs/screenshots/palette-and-icons.png)
 

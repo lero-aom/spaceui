@@ -110,6 +110,7 @@ pub fn thinking(ui: &mut Ui, text: &str, active: bool, secs: f32, open: bool) ->
 
 /// The state of a tool call on the timeline.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum StepStatus {
     /// Still running: a pulsing dot.
     Running,

@@ -1,7 +1,7 @@
 //! Colours, sizes, fonts and backdrops: everything that makes a look.
 //!
 //! A [`Theme`] bundles a [`Palette`] (semantic colours), [`Metrics`] (sizes
-//! and radii), the fonts and a [`Backdrop`]. Install one per context with
+//! and radii), [`Fonts`] and a [`Backdrop`]. Install one per context with
 //! [`Theme::install`]; widgets read it back with [`Theme::of`].
 //!
 //! ```
@@ -16,7 +16,7 @@ mod fonts;
 mod palette;
 
 pub use backdrop::paint_backdrop;
-pub use fonts::{SEMIBOLD, mono, regular, semibold};
+pub use fonts::{FontFile, Fonts, SEMIBOLD, mono, regular, semibold};
 pub use palette::Palette;
 
 use egui::{Color32, Context, CornerRadius, Id, Stroke, TextStyle, Visuals, epaint::Shadow, vec2};
@@ -68,6 +68,7 @@ impl Metrics {
 
 /// What the window shows behind the cards.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Backdrop {
     /// The palette's gradient alone.
     Plain,
@@ -110,6 +111,8 @@ pub struct Theme {
     pub palette: Palette,
     /// The sizes.
     pub metrics: Metrics,
+    /// The text fonts.
+    pub fonts: Fonts,
     /// What shows behind the cards.
     pub backdrop: Backdrop,
 }
@@ -128,6 +131,7 @@ impl Theme {
             name: "Carbon / Copper",
             palette: Palette::CARBON_COPPER,
             metrics: Metrics::default(),
+            fonts: Fonts::SYSTEM,
             backdrop: Backdrop::Carbon { weave: 7, bloom: 14 },
         }
     }
@@ -139,6 +143,7 @@ impl Theme {
             name: "Deep Space",
             palette: Palette::DEEP_SPACE,
             metrics: Metrics { title_bar: 48.0, rail: 72.0, tile: 50.0, card_radius: 18.0, ..Metrics::default() },
+            fonts: Fonts::SYSTEM,
             backdrop: Backdrop::Starfield,
         }
     }
@@ -148,10 +153,10 @@ impl Theme {
     }
 
     /// Makes this the context's theme: stores it for [`Theme::of`], sets
-    /// egui's visuals and spacing to match, and installs the fonts (once per
-    /// context). Takes effect from the next frame.
+    /// egui's visuals and spacing to match, and installs its fonts (only when
+    /// they differ from the installed ones). Takes effect from the next frame.
     pub fn install(self, ctx: &Context) {
-        fonts::install(ctx);
+        fonts::install(ctx, &self.fonts);
         ctx.set_theme(egui::ThemePreference::Dark);
         ctx.set_visuals_of(egui::Theme::Dark, self.visuals());
         ctx.global_style_mut(|style| {

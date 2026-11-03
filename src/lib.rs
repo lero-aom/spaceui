@@ -5,13 +5,14 @@
 //! and a chat column, built from small parts you can also use on their own.
 //!
 //! - **One theme, everywhere.** A [`Theme`] (a semantic [`Palette`],
-//!   [`Metrics`], fonts and a [`Backdrop`]) is installed once per context;
+//!   [`Metrics`], [`Fonts`] and a [`Backdrop`]) is installed once per context;
 //!   every widget reads it back with [`Theme::of`]. Nothing hard-codes a colour.
 //! - **Smooth at any scale.** Gradients and fills get a one-pixel feathered
 //!   edge like egui's own shapes ([`paint`]); icons and logos are SVG,
 //!   rasterized at the exact pixel size they're drawn at ([`art`]).
-//! - **Shell, not framework.** [`Shell`] paints the window and returns the
-//!   [`Regions`] to fill; your app keeps its own state, pages and backends.
+//! - **Shell, not framework.** [`Shell`] paints the window (a title bar, an
+//!   optional rail, columns on either side) and returns the [`Regions`] to
+//!   fill; your app keeps its own state, pages and backends.
 //!
 //! # Quick start
 //!
@@ -37,7 +38,7 @@
 //!         let regions = Shell::new("My App")
 //!             .logo(Icon::Orbit.svg())
 //!             .rail(RAIL)
-//!             .side_column(&mut self.side, 320.0..=560.0)
+//!             .right_column(&mut self.side, 320.0..=560.0)
 //!             .show(ui, &mut self.page);
 //!
 //!         ui.scope_builder(egui::UiBuilder::new().max_rect(regions.main), |ui| {
@@ -77,11 +78,11 @@
 //!
 //! | Module | Holds |
 //! |---|---|
-//! | [`theme`] | [`Theme`], [`Palette`], [`Metrics`], [`Backdrop`] and the fonts |
+//! | [`theme`] | [`Theme`], [`Palette`], [`Metrics`], [`Fonts`] and [`Backdrop`] |
 //! | [`paint`] | Anti-aliased gradients, polygon fills and glows |
 //! | [`art`] | The built-in [`Icon`] set and app [`Svg`]s such as logos |
 //! | [`widgets`] | Buttons, pills, tabs, cards, switches, fields and sliders |
-//! | [`shell`] | The window: title bar, icon rail, cards and a side column |
+//! | [`shell`] | The window: title bar, optional icon rail, cards and columns on either side |
 //! | [`chat`] | A chat column: tabs, transcript, composer and Markdown |
 //! | [`window`] | Native window setup and screenshot runs |
 //!
@@ -122,7 +123,7 @@ pub use egui;
 #[doc(no_inline)]
 pub use shell::{RailItem, Regions, Shell};
 #[doc(no_inline)]
-pub use theme::{Backdrop, Metrics, Palette, Theme};
+pub use theme::{Backdrop, Fonts, Metrics, Palette, Theme};
 
 /// The names most apps need: `use spaceui::prelude::*;`.
 pub mod prelude {
@@ -131,7 +132,7 @@ pub mod prelude {
     #[doc(no_inline)]
     pub use crate::shell::{RailItem, Regions, Shell};
     #[doc(no_inline)]
-    pub use crate::theme::{Backdrop, Metrics, Palette, Theme, mono, regular, semibold};
+    pub use crate::theme::{Backdrop, FontFile, Fonts, Metrics, Palette, Theme, mono, regular, semibold};
     #[doc(no_inline)]
     pub use crate::widgets::Tone;
     #[doc(no_inline)]

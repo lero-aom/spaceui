@@ -19,6 +19,6 @@ pub fn switch(ui: &mut Ui, on: &mut bool) -> Response {
     }
     let x = lerp(rect.left() + 12.0..=rect.right() - 12.0, t);
     painter.circle_filled(pos2(x, rect.center().y + 1.0), 9.0, Color32::from_black_alpha(60));
-    painter.circle_filled(pos2(x, rect.center().y), 8.5, Color32::from_rgb(250, 246, 242));
+    painter.circle_filled(pos2(x, rect.center().y), 8.5, p.text);
     response.on_hover_cursor(CursorIcon::PointingHand)
 }

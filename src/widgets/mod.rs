@@ -48,8 +48,10 @@ pub use toggle::switch;
 use crate::theme::Palette;
 use egui::Color32;
 
-/// A semantic colour for status widgets.
+/// A semantic colour for status widgets: a palette role, or a colour of
+/// your own with [`Tone::Custom`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Tone {
     /// Body text colour.
     Neutral,
@@ -65,6 +67,8 @@ pub enum Tone {
     Info,
     /// De-emphasised.
     Muted,
+    /// A colour of your own, used as given.
+    Custom(Color32),
 }
 
 impl Tone {
@@ -79,6 +83,21 @@ impl Tone {
             Tone::Warning => palette.warning,
             Tone::Info => palette.info,
             Tone::Muted => palette.muted,
+            Tone::Custom(color) => color,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tones_follow_the_palette_unless_custom() {
+        let palette = Palette::DEEP_SPACE;
+        assert_eq!(Tone::Accent.color(&palette), palette.accent_hi);
+        assert_eq!(Tone::Negative.color(&palette), palette.negative);
+        let teal = Color32::from_rgb(40, 190, 170);
+        assert_eq!(Tone::Custom(teal).color(&palette), teal);
     }
 }

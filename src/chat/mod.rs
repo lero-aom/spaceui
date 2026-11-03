@@ -18,7 +18,7 @@
 //! # Theme::carbon_copper().install(&ctx);
 //! # let mut draft = String::new();
 //! # ctx.run_ui(Default::default(), |ui| {
-//! let column = ui.max_rect(); // e.g. `Regions::side` from the shell
+//! let column = ui.max_rect(); // e.g. `Regions::right` from the shell
 //! let hint = "Ask anything";
 //! let layout = ChatLayout::new(column, Composer::measure(ui, column.width(), &draft, hint));
 //!

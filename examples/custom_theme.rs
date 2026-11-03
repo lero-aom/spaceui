@@ -44,6 +44,7 @@ impl eframe::App for App {
                     widgets::switch(ui, &mut self.on);
                     widgets::segmented(ui, &mut self.level, &["Low", "Mid", "High"]);
                     widgets::chip(ui, "ACCENT", Tone::Accent);
+                    widgets::chip(ui, "ONE-OFF", Tone::Custom(Color32::from_rgb(255, 196, 92)));
                 });
             });
         });

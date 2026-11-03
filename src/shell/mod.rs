@@ -1,23 +1,25 @@
-//! The window: a custom title bar, an icon rail, a carded main panel and a
-//! resizable side column.
+//! The window: a custom title bar, an optional icon rail, a carded main panel
+//! and resizable columns on either side.
 //!
 //! ```text
-//! ┌──────────────────────────────────────────────────────────┐
-//! │ ◉ Title                         status…    ─  ☐  ✕       │  title bar (own, draggable)
-//! ├────┬─────────────────────────────────────┬───────────────┤
-//! │ ▣  │                                     │               │
-//! │ ◇  │            main card                │  side column  │
-//! │ ◇  │                                     │  (e.g. chat)  │
-//! │ ── │                                     │               │
-//! │ ⚙  │                                     │               │
-//! └────┴─────────────────────────────────────┴───────────────┘
-//!  rail                                  splitter
+//! ┌────────────────────────────────────────────────────────────────┐
+//! │ ◉ Title                               status…    ─  ☐  ✕       │  title bar (own, draggable)
+//! ├────┬────────────┬────────────────────────────┬─────────────────┤
+//! │ ▣  │            │                            │                 │
+//! │ ◇  │    left    │         main card          │      right      │
+//! │ ◇  │   column   │                            │     column      │
+//! │ ── │            │                            │   (e.g. chat)   │
+//! │ ⚙  │            │                            │                 │
+//! └────┴────────────┴────────────────────────────┴─────────────────┘
+//!  rail          splitter                    splitter
 //! ```
 //!
+//! Only the title bar and the main card are always there: add a rail, a
+//! left column, a right column and a status line as you need them.
 //! [`Shell::show`] paints the backdrop, title bar, rail and card plates,
-//! handles window dragging, resizing, the splitter and the rail selection,
-//! and returns the [`Regions`] the app fills. Use it with an undecorated
-//! viewport ([`window::viewport`](crate::window::viewport)).
+//! handles window dragging and resizing, the splitters and the rail
+//! selection, and returns the [`Regions`] the app fills. Use it with an
+//! undecorated viewport ([`window::viewport`](crate::window::viewport)).
 //!
 //! The title bar lives on egui's tooltip layer, above modal dialogs, so the
 //! window can always be moved, maximized and closed, even while a modal
@@ -27,11 +29,12 @@ mod title_bar;
 mod window_edges;
 
 use crate::{Icon, Svg, Theme, theme::paint_backdrop, widgets};
-use egui::{CursorIcon, Rect, Sense, Stroke, Ui, pos2, vec2};
+use egui::{CursorIcon, Id, Rect, Sense, Stroke, Ui, pos2, vec2};
 use std::{fmt, ops::RangeInclusive};
 
 /// An entry in the icon rail.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum RailItem {
     /// A selectable page.
     Page {
@@ -57,14 +60,20 @@ impl RailItem {
 pub struct Regions {
     /// The main card's content area, inside its padding.
     pub main: Rect,
-    /// The side column's whole card (a chat column draws its own padding).
-    pub side: Option<Rect>,
-    /// The status line under the cards.
+    /// The left column's whole card, if the shell has one. Columns are
+    /// returned unpadded, since a chat column draws its own padding.
+    pub left: Option<Rect>,
+    /// The right column's whole card, if the shell has one.
+    pub right: Option<Rect>,
+    /// The status line under the cards, if the shell has one.
     pub status: Option<Rect>,
 }
 
 /// Content drawn into the title bar's status area.
 type TitleStatus<'a> = Box<dyn FnOnce(&mut Ui) + 'a>;
+
+/// A resizable column: its width (kept by the app) and allowed range.
+type Column<'a> = (&'a mut f32, RangeInclusive<f32>);
 
 /// Builder for the window shell. Build and show it from the root `Ui` every
 /// frame.
@@ -76,16 +85,16 @@ type TitleStatus<'a> = Box<dyn FnOnce(&mut Ui) + 'a>;
 ///
 /// # let ctx = egui::Context::default();
 /// # Theme::carbon_copper().install(&ctx);
-/// # let (mut page, mut side) = (0, 380.0);
+/// # let (mut page, mut chat_width) = (0, 380.0);
 /// # ctx.run_ui(Default::default(), |ui| {
 /// let regions = Shell::new("My App")
 ///     .rail(RAIL)
-///     .side_column(&mut side, 320.0..=560.0)
+///     .left_column(&mut chat_width, 320.0..=560.0) // or `right_column`
 ///     .title_status(|ui| {
 ///         widgets::pill(ui, Some(Tone::Positive), "Connected");
 ///     })
 ///     .show(ui, &mut page);
-/// assert!(regions.side.is_some());
+/// assert!(regions.left.is_some() && regions.right.is_none());
 /// # }).drop_without_applying_deltas();
 /// ```
 #[must_use = "a shell does nothing until `show` is called"]
@@ -93,7 +102,8 @@ pub struct Shell<'a> {
     title: &'a str,
     logo: Option<Svg>,
     rail: &'a [RailItem],
-    side: Option<(&'a mut f32, RangeInclusive<f32>)>,
+    left: Option<Column<'a>>,
+    right: Option<Column<'a>>,
     status: f32,
     enabled: bool,
     title_status: Option<TitleStatus<'a>>,
@@ -105,7 +115,8 @@ impl fmt::Debug for Shell<'_> {
             .field("title", &self.title)
             .field("logo", &self.logo.map(|svg| svg.name))
             .field("rail", &self.rail)
-            .field("side", &self.side)
+            .field("left", &self.left)
+            .field("right", &self.right)
             .field("status", &self.status)
             .field("enabled", &self.enabled)
             .field("title_status", &self.title_status.is_some())
@@ -114,9 +125,10 @@ impl fmt::Debug for Shell<'_> {
 }
 
 impl<'a> Shell<'a> {
-    /// A shell titled `title`, with no logo, rail, side column or status line yet.
+    /// A shell titled `title`: the title bar and the main card, with no logo,
+    /// rail, columns or status line yet.
     pub fn new(title: &'a str) -> Self {
-        Self { title, logo: None, rail: &[], side: None, status: 0.0, enabled: true, title_status: None }
+        Self { title, logo: None, rail: &[], left: None, right: None, status: 0.0, enabled: true, title_status: None }
     }
 
     /// The app's logo, beside the title.
@@ -125,17 +137,26 @@ impl<'a> Shell<'a> {
         self
     }
 
-    /// The rail's pages and dividers. [`show`](Self::show) takes the
-    /// selected page as an index counting pages only.
+    /// An icon rail down the left edge with these pages and dividers.
+    /// [`show`](Self::show) takes the selected page as an index counting
+    /// pages only. Without a rail (or with no items), the space goes to the
+    /// cards.
     pub fn rail(mut self, items: &'a [RailItem]) -> Self {
         self.rail = items;
         self
     }
 
-    /// A column on the right, resizable within `range` (and at most half the
-    /// window). The app keeps, and may persist, its width.
-    pub fn side_column(mut self, width: &'a mut f32, range: RangeInclusive<f32>) -> Self {
-        self.side = Some((width, range));
+    /// A column left of the main card (after the rail), resizable within
+    /// `range`. The app keeps, and may persist, its width.
+    pub fn left_column(mut self, width: &'a mut f32, range: RangeInclusive<f32>) -> Self {
+        self.left = Some((width, range));
+        self
+    }
+
+    /// A column right of the main card, resizable within `range`. The app
+    /// keeps, and may persist, its width.
+    pub fn right_column(mut self, width: &'a mut f32, range: RangeInclusive<f32>) -> Self {
+        self.right = Some((width, range));
         self
     }
 
@@ -161,57 +182,84 @@ impl<'a> Shell<'a> {
 
     /// Paints the window and handles its interaction. `page` is the selected
     /// rail page, updated when the owner clicks another one.
+    ///
+    /// A column is clamped to its range and to half the window, or to 35% of
+    /// it when there are columns on both sides.
     pub fn show(self, ui: &mut Ui, page: &mut usize) -> Regions {
         let ctx = ui.ctx().clone();
-        let theme = Theme::of(&ctx);
-        let metrics = theme.metrics;
+        let metrics = Theme::of(&ctx).metrics;
         paint_backdrop(&ctx);
         let window = ctx.content_rect();
         title_bar::show(&ctx, window, self.title, self.logo, self.title_status);
 
         let top = window.top() + metrics.title_bar;
         let bottom = window.bottom() - metrics.gap - self.status.max(metrics.gap * 0.5);
-        let rail =
-            Rect::from_min_max(pos2(window.left() + metrics.gap, top), pos2(window.left() + metrics.rail, bottom));
-        rail::show(ui, rail, self.rail, page, self.enabled);
+        let mut left_edge = window.left() + metrics.gap * 1.5;
+        if !self.rail.is_empty() {
+            let rail =
+                Rect::from_min_max(pos2(window.left() + metrics.gap, top), pos2(window.left() + metrics.rail, bottom));
+            rail::show(ui, rail, self.rail, page, self.enabled);
+            left_edge = rail.right() + 6.0;
+        }
+        let mut right_edge = window.right() - metrics.gap * 1.5;
+        let share = if self.left.is_some() && self.right.is_some() { 0.35 } else { 0.5 };
+        let gutter = metrics.gap * 1.75;
 
-        let right = window.right() - metrics.gap * 1.5;
-        let (main, side) = if let Some((width, range)) = self.side {
-            let max = (window.width() * 0.5).max(*range.start()).min(*range.end());
-            *width = width.clamp(*range.start(), max);
-            let side = Rect::from_min_max(pos2(right - *width, top), pos2(right, bottom));
-            let main =
-                Rect::from_min_max(pos2(rail.right() + 6.0, top), pos2(side.left() - metrics.gap * 1.75, bottom));
-            let handle = Rect::from_min_max(pos2(main.right(), top + 20.0), pos2(side.left(), bottom - 20.0));
-            splitter(ui, handle, width, *range.start(), max);
-            (main, Some(side))
-        } else {
-            (Rect::from_min_max(pos2(rail.right() + 6.0, top), pos2(right, bottom)), None)
-        };
-        widgets::plate(ui.painter(), main);
-        if let Some(side) = side {
-            widgets::plate(ui.painter(), side);
+        let left = self.left.map(|(width, range)| {
+            let (min, max) = limits(&range, window.width() * share);
+            *width = width.clamp(min, max);
+            let column = Rect::from_min_max(pos2(left_edge, top), pos2(left_edge + *width, bottom));
+            left_edge = column.right() + gutter;
+            let handle = Rect::from_min_max(pos2(column.right(), top + 20.0), pos2(left_edge, bottom - 20.0));
+            splitter(ui, handle, "spaceui-splitter-left", width, min, max, 1.0);
+            column
+        });
+        let right = self.right.map(|(width, range)| {
+            let (min, max) = limits(&range, window.width() * share);
+            *width = width.clamp(min, max);
+            let column = Rect::from_min_max(pos2(right_edge - *width, top), pos2(right_edge, bottom));
+            right_edge = column.left() - gutter;
+            let handle = Rect::from_min_max(pos2(right_edge, top + 20.0), pos2(column.left(), bottom - 20.0));
+            splitter(ui, handle, "spaceui-splitter-right", width, min, max, -1.0);
+            column
+        });
+
+        let main = Rect::from_min_max(pos2(left_edge, top), pos2(right_edge, bottom));
+        for card in [Some(main), left, right].into_iter().flatten() {
+            widgets::plate(ui.painter(), card);
         }
         window_edges::show(&ctx);
         Regions {
             main: main.shrink2(vec2(18.0, 14.0)),
-            side,
+            left,
+            right,
             status: (self.status > 0.0).then(|| {
-                Rect::from_min_max(pos2(rail.left() + 12.0, bottom + 2.0), pos2(right - 6.0, window.bottom() - 2.0))
+                Rect::from_min_max(
+                    pos2(window.left() + metrics.gap + 12.0, bottom + 2.0),
+                    pos2(window.right() - metrics.gap * 1.5 - 6.0, window.bottom() - 2.0),
+                )
             }),
         }
     }
 }
 
-/// The drag handle between the main card and the side column.
-fn splitter(ui: &mut Ui, rect: Rect, width: &mut f32, min: f32, max: f32) {
-    let response = ui.interact(rect, ui.scope_id().with("spaceui-splitter"), Sense::drag());
+/// A column's width limits: its range, capped at `cap` but never below the
+/// range's start.
+fn limits(range: &RangeInclusive<f32>, cap: f32) -> (f32, f32) {
+    let min = *range.start();
+    (min, range.end().min(cap).max(min))
+}
+
+/// The drag handle between a column and the main card. `direction` is +1 for
+/// a left column (dragging right widens it) and -1 for a right one.
+fn splitter(ui: &Ui, rect: Rect, salt: &str, width: &mut f32, min: f32, max: f32, direction: f32) {
+    let response = ui.interact(rect, Id::unique(salt), Sense::drag());
     if response.hovered() || response.dragged() {
         ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
         let accent = Theme::of(ui.ctx()).palette.accent;
         ui.painter().vline(rect.center().x, rect.y_range().shrink(40.0), Stroke::new(2.0, accent.gamma_multiply(0.5)));
     }
     if response.dragged() {
-        *width = (*width - response.drag_delta().x).clamp(min, max);
+        *width = (*width + direction * response.drag_delta().x).clamp(min, max);
     }
 }

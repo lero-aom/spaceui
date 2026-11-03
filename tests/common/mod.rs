@@ -39,6 +39,18 @@ impl Harness {
         self.frame(vec![button(at, false)], &mut ui);
     }
 
+    /// Lays out once, then drags from `from` to `to` in six moves.
+    pub fn drag(&mut self, from: Pos2, to: Pos2, ui: &mut impl FnMut(&mut Ui)) {
+        const MOVES: u8 = 6;
+        self.frame(Vec::new(), ui);
+        self.frame(vec![Event::PointerMoved(from), button(from, true)], ui);
+        for step in 1..=MOVES {
+            let at = from + (to - from) * (f32::from(step) / f32::from(MOVES));
+            self.frame(vec![Event::PointerMoved(at)], ui);
+        }
+        self.frame(vec![button(to, false)], ui);
+    }
+
     /// Types `text`, then presses `key` with `modifiers`, one frame each.
     pub fn type_then(&mut self, text: &str, key: Key, modifiers: Modifiers, mut ui: impl FnMut(&mut Ui)) {
         self.frame(vec![Event::Text(text.to_owned())], &mut ui);

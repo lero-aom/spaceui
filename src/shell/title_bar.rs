@@ -74,10 +74,15 @@ fn window_buttons(ui: &Ui, rect: Rect) {
         let response = ui.interact(button, Id::unique(("spaceui-window-button", i)), Sense::click());
         let close = i == 2;
         if response.hovered() {
-            let plate = if close { Color32::from_rgb(214, 64, 58) } else { p.field_hover };
+            // Close turns a deeper shade of the palette's red, as destructive actions do.
+            let plate = if close { paint::mix(p.negative, Color32::BLACK, 0.15) } else { p.field_hover };
             ui.painter().rect_filled(button.shrink2(vec2(4.0, 5.0)), 8.0, plate);
         }
-        let ink = if response.hovered() { Color32::WHITE } else { p.text_2 };
+        let ink = match (response.hovered(), close) {
+            (true, true) => p.on_accent,
+            (true, false) => p.text,
+            (false, _) => p.text_2,
+        };
         icon.paint(ui.painter(), Rect::from_center_size(button.center(), Vec2::splat(20.0)), ink);
         if response.clicked() {
             ui.ctx().send_viewport_cmd(command);

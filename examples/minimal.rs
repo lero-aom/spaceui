@@ -25,7 +25,7 @@ impl eframe::App for App {
         let regions = Shell::new("My App")
             .logo(Icon::Orbit.svg())
             .rail(RAIL)
-            .side_column(&mut self.side, 320.0..=560.0)
+            .right_column(&mut self.side, 320.0..=560.0)
             .show(ui, &mut self.page);
 
         ui.scope_builder(egui::UiBuilder::new().max_rect(regions.main), |ui| {

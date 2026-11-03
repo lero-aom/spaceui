@@ -12,17 +12,19 @@ First release.
 
 ### Added
 
-- `theme`: `Theme`, `Palette`, `Metrics` and `Backdrop`; the Carbon / Copper
-  and Deep Space themes; Segoe UI fonts; egui visuals.
+- `theme`: `Theme`, `Palette`, `Metrics`, `Fonts` (system Segoe UI, egui's
+  bundled fonts or your own files) and `Backdrop`; the Carbon / Copper and
+  Deep Space themes; egui visuals.
 - `paint`: anti-aliased gradients, polygon fills, glows and a sparkle glyph.
 - `art`: 70 built-in line icons and app SVGs, rasterized at exact pixel sizes,
   with window icons.
 - `widgets`: primary, secondary and icon buttons; pills, badges and chips;
   underline tabs and segmented controls; cards, sections, captions and
-  metrics; a switch, a text field and a notched slider.
-- `shell`: a custom title bar that stays usable above modal dialogs, an icon
-  rail, a carded main panel, a resizable side column, a status line and
-  window resize edges.
+  metrics; a switch, a text field and a notched slider. Status widgets take a
+  `Tone`: a palette role or `Tone::Custom(color)`.
+- `shell`: a custom title bar that stays usable above modal dialogs, an
+  optional icon rail, a carded main panel, resizable columns on the left, the
+  right or both, a status line and window resize edges.
 - `chat`: `ChatLayout`, conversation tabs, transcript pieces (bubbles,
   replies, thinking, tool steps, notices, an empty state), `Composer` and a
   Markdown renderer.

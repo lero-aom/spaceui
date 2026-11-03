@@ -6,7 +6,8 @@
 //! ```
 //!
 //! For a screenshot run, set `SPACEUI_SCREENSHOT=out.png`; `SPACEUI_THEME=deep_space`
-//! picks the Deep Space theme and `SPACEUI_PAGE=0..=3` the page.
+//! picks the Deep Space theme, `SPACEUI_CHAT=left` puts the chat on the left and
+//! `SPACEUI_PAGE=0..=3` picks the page.
 use spaceui::chat::{self, ChatLayout, Composer, Tab, TabAction, transcript};
 use spaceui::egui::{self, Color32, RichText, ScrollArea, UiBuilder, vec2};
 use spaceui::prelude::*;
@@ -67,6 +68,8 @@ impl Conversation {
 struct Gallery {
     page: usize,
     side: f32,
+    /// Where the chat column sits: 0 is left, 1 is right.
+    chat_side: usize,
     deep_space: bool,
     installed: Option<bool>,
     chats: Vec<Conversation>,
@@ -105,6 +108,7 @@ impl Gallery {
         Self {
             page: std::env::var("SPACEUI_PAGE").ok().and_then(|page| page.parse().ok()).unwrap_or(0),
             side: 380.0,
+            chat_side: usize::from(!std::env::var("SPACEUI_CHAT").is_ok_and(|side| side == "left")),
             deep_space,
             installed: None,
             chats: vec![welcome, Conversation::new(2)],
@@ -193,6 +197,7 @@ impl Gallery {
                         ("NEGATIVE", Tone::Negative),
                         ("INFO", Tone::Info),
                         ("MUTED", Tone::Muted),
+                        ("CUSTOM", Tone::Custom(Color32::from_rgb(64, 156, 255))),
                     ] {
                         widgets::chip(ui, text, tone);
                     }
@@ -227,6 +232,13 @@ impl Gallery {
             widgets::segmented(ui, &mut choice, &["Carbon / Copper", "Deep Space"]);
             self.deep_space = choice == 1;
             widgets::caption(ui, "Installing a theme restyles every widget on the next frame.");
+            ui.add_space(10.0);
+            widgets::section(ui, "02", "Chat column");
+            widgets::segmented(ui, &mut self.chat_side, &["Left", "Right"]);
+            widgets::caption(
+                ui,
+                "The shell takes columns on either side, or both; the chat kit draws into any rectangle.",
+            );
         });
     }
 
@@ -401,16 +413,17 @@ impl eframe::App for Gallery {
         }
         let theme_name = Theme::of(&ctx).name;
         let mut toggle = false;
-        let regions = Shell::new("SpaceUI")
-            .logo(LOGO)
-            .rail(RAIL)
-            .side_column(&mut self.side, 330.0..=600.0)
-            .status_bar(22.0)
-            .title_status(|ui| {
-                toggle = widgets::pill(ui, Some(Tone::Accent), theme_name).on_hover_text("Switch theme").clicked();
-                widgets::badge(ui, Icon::Shield, "Demo data", Tone::Positive);
-            })
-            .show(ui, &mut self.page);
+        let shell = Shell::new("SpaceUI").logo(LOGO).rail(RAIL).status_bar(22.0).title_status(|ui| {
+            toggle = widgets::pill(ui, Some(Tone::Accent), theme_name).on_hover_text("Switch theme").clicked();
+            widgets::badge(ui, Icon::Shield, "Demo data", Tone::Positive);
+        });
+        let range = 330.0..=600.0;
+        let shell = if self.chat_side == 0 {
+            shell.left_column(&mut self.side, range)
+        } else {
+            shell.right_column(&mut self.side, range)
+        };
+        let regions = shell.show(ui, &mut self.page);
         if toggle {
             self.deep_space = !self.deep_space;
         }
@@ -421,7 +434,7 @@ impl eframe::App for Gallery {
                 self.page(ui);
             });
         });
-        if let Some(column) = regions.side {
+        if let Some(column) = regions.left.or(regions.right) {
             self.chat_column(ui, column);
         }
         if let Some(status) = regions.status {

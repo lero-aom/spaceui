@@ -1,4 +1,4 @@
-use super::{Backdrop, Theme};
+use super::{Backdrop, Palette, Theme};
 use crate::paint;
 use egui::{Color32, ColorImage, Context, Id, LayerId, Painter, Rect, TextureHandle, TextureOptions, pos2, vec2};
 
@@ -18,7 +18,7 @@ pub fn paint_backdrop(ctx: &Context) {
             painter.image(weave_texture(ctx).id(), rect, uv, Color32::from_white_alpha(weave));
             paint::radial_glow(&painter, rect.left_top() + vec2(120.0, 40.0), 520.0, p.accent, bloom);
         }
-        Backdrop::Starfield => starfield(&painter, rect, p.accent_hi),
+        Backdrop::Starfield => starfield(&painter, rect, p),
     }
 }
 
@@ -49,11 +49,12 @@ fn weave_texture(ctx: &Context) -> TextureHandle {
     texture
 }
 
-/// Two nebula glows and a deterministic starfield, so the stars hold still.
-fn starfield(painter: &Painter, rect: Rect, tint: Color32) {
-    for (fx, fy, radius, color) in
-        [(0.18, 0.12, 420.0, Color32::from_rgb(40, 26, 92)), (0.82, 0.92, 520.0, Color32::from_rgb(30, 24, 80))]
-    {
+/// Two nebula glows in the accent's shade and a deterministic starfield, so
+/// the stars hold still.
+fn starfield(painter: &Painter, rect: Rect, p: &Palette) {
+    let nebulae = [(0.18, 0.12, 420.0, 0.7), (0.82, 0.92, 520.0, 0.8)];
+    for (fx, fy, radius, depth) in nebulae {
+        let color = paint::mix(p.accent_lo, p.bg_top, depth);
         let center = pos2(rect.left() + rect.width() * fx, rect.top() + rect.height() * fy);
         paint::radial_glow(painter, center, radius, color, 26);
     }
@@ -69,6 +70,6 @@ fn starfield(painter: &Painter, rect: Rect, tint: Color32) {
         let at = pos2(rect.left() + next() * rect.width(), rect.top() + next() * rect.height());
         let size = 0.35 + next().powf(3.0) * 1.25;
         let alpha = 0.25 + next() * 0.55;
-        painter.circle_filled(at, size, paint::mix(Color32::WHITE, tint, next()).gamma_multiply(alpha));
+        painter.circle_filled(at, size, paint::mix(Color32::WHITE, p.accent_hi, next()).gamma_multiply(alpha));
     }
 }
