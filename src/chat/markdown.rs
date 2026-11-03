@@ -133,10 +133,11 @@ fn paragraph(ui: &mut Ui, text: &str, font: &FontId, color: Color32, p: &Palette
     let mut first_link = 0;
     for row in &galley.rows {
         let row_end = row_start + row.glyphs.len();
-        while first_link < links.len() && links[first_link].0.end <= row_start {
+        while first_link < links.len() && links[first_link].characters.end <= row_start {
             first_link += 1;
         }
-        for (index, (range, _)) in links.iter().enumerate().skip(first_link) {
+        for (index, link) in links.iter().enumerate().skip(first_link) {
+            let range = &link.characters;
             if range.start >= row_end {
                 break;
             }
@@ -153,15 +154,13 @@ fn paragraph(ui: &mut Ui, text: &str, font: &FontId, color: Color32, p: &Palette
         }
         row_start = row_end + usize::from(row.ends_with_newline);
     }
-    let displayed: Vec<char> = galley.text().chars().collect();
-    for (index, ((range, target), parts)) in links.iter().zip(rectangles).enumerate() {
+    for (index, (link, parts)) in links.iter().zip(rectangles).enumerate() {
         let Some(bounds) = parts.iter().copied().reduce(Rect::union) else {
             continue;
         };
         let id = response.id.with(("link", index));
         let focus = ui.interact(bounds, id, Sense::focusable_noninteractive());
-        let label: String = displayed[range.clone()].iter().collect();
-        focus.widget_info(|| WidgetInfo::labeled(Role::Link, ui.is_enabled(), &label));
+        focus.widget_info(|| WidgetInfo::labeled(Role::Link, ui.is_enabled(), link.label));
         ui.ctx().accesskit_node_builder(id, |node| {
             node.add_action(egui::accesskit::Action::Click);
         });
@@ -180,10 +179,10 @@ fn paragraph(ui: &mut Ui, text: &str, font: &FontId, color: Color32, p: &Palette
             if hit.hovered() || focus.has_focus() {
                 ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(2.0, p.accent_hi));
             }
-            clicked |= hit.on_hover_text(target).clicked();
+            clicked |= hit.on_hover_text(link.target).clicked();
         }
         if clicked {
-            ui.ctx().open_url(OpenUrl::new_tab(target));
+            ui.ctx().open_url(OpenUrl::new_tab(link.target));
         }
     }
 }
@@ -210,12 +209,7 @@ pub fn inline_job(text: &str, font: &FontId, color: Color32, palette: &Palette) 
 }
 
 /// Like [`inline_job`], also returning each link's character range and target.
-fn inline_job_links(
-    text: &str,
-    font: &FontId,
-    color: Color32,
-    p: &Palette,
-) -> (LayoutJob, Vec<(Range<usize>, String)>) {
+fn inline_job_links<'a>(text: &'a str, font: &FontId, color: Color32, p: &Palette) -> (LayoutJob, Vec<Link<'a>>) {
     let mut out = Inline {
         job: LayoutJob::default(),
         links: Vec::new(),
@@ -286,11 +280,11 @@ fn inline_job_links(
         } else if ch == '['
             && let Some((label, target, used)) = markdown_link(text, i, &markers)
         {
-            out.link(label, target.to_owned(), p);
+            out.link(label, target, p);
             i += used;
         } else if let Some(url) = bare_url(text, i) {
             i += url.len();
-            out.link(url, url.to_owned(), p);
+            out.link(url, url, p);
         } else {
             out.buffer.push(ch);
             i += ch.len_utf8();
@@ -300,10 +294,17 @@ fn inline_job_links(
     (out.job, out.links)
 }
 
+/// Link text is copied into the layout job, but its metadata can borrow the input.
+struct Link<'a> {
+    characters: Range<usize>,
+    label: &'a str,
+    target: &'a str,
+}
+
 /// The inline renderer's state while it walks the text.
-struct Inline {
+struct Inline<'a> {
     job: LayoutJob,
-    links: Vec<(Range<usize>, String)>,
+    links: Vec<Link<'a>>,
     plain: TextFormat,
     bold_font: FontId,
     bold: bool,
@@ -312,7 +313,7 @@ struct Inline {
     characters: usize,
 }
 
-impl Inline {
+impl<'a> Inline<'a> {
     fn format(&self) -> TextFormat {
         let mut format = self.plain.clone();
         if self.bold {
@@ -332,7 +333,7 @@ impl Inline {
         }
     }
 
-    fn link(&mut self, label: &str, target: String, p: &Palette) {
+    fn link(&mut self, label: &'a str, target: &'a str, p: &Palette) {
         self.flush();
         let mut format = self.format();
         format.color = p.accent_hi;
@@ -340,7 +341,7 @@ impl Inline {
         let start = self.characters;
         self.job.append(label, 0.0, format);
         self.characters += label.chars().count();
-        self.links.push((start..self.characters, target));
+        self.links.push(Link { characters: start..self.characters, label, target });
     }
 }
 
@@ -392,7 +393,9 @@ impl Markers {
         }
         let kind = usize::from(underscore) + if length == 2 { 2 } else { 0 };
         let end = self.next(kind, start)?;
-        let body = &text[start + length..end];
+        // An unmatched opener can advance into an indexed double delimiter.
+        // Such overlapping delimiters are literal text, not a valid body.
+        let body = text.get(start + length..end)?;
         (!body.is_empty() && !body.starts_with(char::is_whitespace) && !body.ends_with(char::is_whitespace))
             .then_some(end)
     }
@@ -454,7 +457,7 @@ mod tests {
         );
         assert_eq!(job.text, "Long NVDA, see wiki or https://x.com/a.");
         assert_eq!(job.sections[0].format.font_id, semibold(13.0));
-        let targets: Vec<_> = links.iter().map(|(_, t)| t.as_str()).collect();
+        let targets: Vec<_> = links.iter().map(|link| link.target).collect();
         assert_eq!(targets, ["https://example.com/w", "https://x.com/a"]);
     }
 
@@ -483,6 +486,28 @@ mod tests {
     }
 
     #[test]
+    fn repeated_emphasis_delimiters_never_form_inverted_ranges() {
+        let p = Palette::CARBON_COPPER;
+        let font = FontId::proportional(13.0);
+        // Minimized hosted-fuzzer input: an unmatched opener overlaps a later pair.
+        let source = "**bold** _ital*****d bol_italic_ bol";
+        let job = inline_job(source, &font, p.text, &p);
+        assert_eq!(job.text, "bold ital*****d bolitalic_ bol");
+        for delimiter in ['*', '_'] {
+            for count in 1..=64 {
+                let run = delimiter.to_string().repeat(count);
+                assert_eq!(inline_job(&run, &font, p.text, &p).text, run);
+                for source in [format!("{run}é{run}"), format!("{run} **bold** _italic_")] {
+                    let job = inline_job(&source, &font, p.text, &p);
+                    for section in &job.sections {
+                        assert!(job.text.get(section.byte_range.start.0..section.byte_range.end.0).is_some());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn unicode_link_ranges_and_balanced_url_parentheses_are_correct() {
         let p = Palette::CARBON_COPPER;
         let (job, links) = inline_job_links(
@@ -491,8 +516,9 @@ mod tests {
             p.text,
             &p,
         );
-        assert_eq!(links[0].0, 2..4);
-        assert_eq!(links[1].1, "https://example.org/a_(b)");
+        assert_eq!(links[0].characters, 2..4);
+        assert_eq!(links[0].label, "世界");
+        assert_eq!(links[1].target, "https://example.org/a_(b)");
         assert_eq!(job.text, "é 世界 (https://example.org/a_(b)).");
     }
 
@@ -512,8 +538,8 @@ mod tests {
             for section in &job.sections {
                 assert!(job.text.get(section.byte_range.start.0..section.byte_range.end.0).is_some());
             }
-            for (range, _) in links {
-                assert!(range.end <= job.text.chars().count());
+            for link in links {
+                assert!(link.characters.end <= job.text.chars().count());
             }
         }
         // A regression for repeated unmatched openers: no suffix is rescanned.

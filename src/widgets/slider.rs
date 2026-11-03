@@ -19,6 +19,7 @@ pub fn notches(ui: &mut Ui, width: f32, count: usize, index: &mut usize) -> Resp
 }
 
 /// A notched slider with an accessible name; the label is not painted.
+/// Input normalization, change reporting and keyboard behavior match [`notches`].
 pub fn notches_labeled(ui: &mut Ui, width: f32, count: usize, index: &mut usize, label: &str) -> Response {
     let p = Theme::of(ui.ctx()).palette;
     let width = if width.is_finite() { width.max(16.0) } else { 160.0 };

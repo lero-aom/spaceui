@@ -64,11 +64,13 @@ missing_docs = "warn"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
 rust_2018_idioms = { level = "warn", priority = -1 }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
 # Pixel maths converts between f32, u32 and usize on purpose.
 cast_possible_truncation = "allow"
 cast_precision_loss = "allow"

@@ -22,24 +22,40 @@ pub use palette::Palette;
 use egui::{Color32, Context, CornerRadius, Id, Stroke, TextStyle, Visuals, epaint::Shadow, vec2};
 use std::sync::Arc;
 
+#[derive(Clone, Copy, Default)]
+struct MotionStyle {
+    animation_time: f32,
+    scroll_animation: egui::style::ScrollAnimation,
+}
+
 /// Disable decorative motion and egui transitions in this context.
 /// Call after installing a theme. Disabling the preference restores the
-/// animation duration that was active before it was enabled. Applications
+/// transition and programmatic-scroll settings active before it was enabled.
+/// Repeated calls preserve the original settings for both light and dark mode. Applications
 /// can connect this to an OS preference or an in-app accessibility setting.
 pub fn set_reduced_motion(ctx: &Context, reduced: bool) {
     let id = Id::unique("spaceui-animation-duration");
     let modes = [egui::Theme::Dark, egui::Theme::Light];
     if reduced {
-        let current = modes.map(|mode| ctx.style_of(mode).animation_time);
+        let current = modes.map(|mode| {
+            let style = ctx.style_of(mode);
+            MotionStyle { animation_time: style.animation_time, scroll_animation: style.scroll_animation }
+        });
         ctx.data_mut(|d| {
-            if d.get_temp::<[f32; 2]>(id).is_none() {
+            if d.get_temp::<[MotionStyle; 2]>(id).is_none() {
                 d.insert_temp(id, current);
             }
         });
-        ctx.all_styles_mut(|style| style.animation_time = 0.0);
-    } else if let Some(durations) = ctx.data_mut(|d| d.remove_temp::<[f32; 2]>(id)) {
-        for (mode, duration) in modes.into_iter().zip(durations) {
-            ctx.style_mut_of(mode, |style| style.animation_time = duration);
+        ctx.all_styles_mut(|style| {
+            style.animation_time = 0.0;
+            style.scroll_animation = egui::style::ScrollAnimation::none();
+        });
+    } else if let Some(settings) = ctx.data_mut(|d| d.remove_temp::<[MotionStyle; 2]>(id)) {
+        for (mode, saved) in modes.into_iter().zip(settings) {
+            ctx.style_mut_of(mode, |style| {
+                style.animation_time = saved.animation_time;
+                style.scroll_animation = saved.scroll_animation;
+            });
         }
     }
     ctx.request_repaint();
@@ -178,12 +194,22 @@ impl Theme {
     /// Makes this the context's theme: stores it for [`Theme::of`], sets
     /// egui's visuals and spacing to match, and installs its fonts (only when
     /// they differ from the installed ones). Takes effect from the next frame.
+    ///
+    /// # Panics
+    ///
+    /// egui parses fonts lazily. Invalid TTF/OTF bytes in a [`FontFile`] can
+    /// cause a panic when text is first rendered in a later frame.
     pub fn install(self, ctx: &Context) {
         self.install_with_mode(ctx, egui::Theme::Dark);
     }
 
     /// Install a custom palette with matching egui light/dark defaults.
     /// Built-in palettes are dark; a light palette should use `Theme::Light`.
+    ///
+    /// # Panics
+    ///
+    /// egui parses fonts lazily. Invalid TTF/OTF bytes in a [`FontFile`] can
+    /// cause a panic when text is first rendered in a later frame.
     pub fn install_with_mode(self, ctx: &Context, mode: egui::Theme) {
         fonts::install(ctx, &self.fonts);
         ctx.set_theme(match mode {
@@ -208,11 +234,12 @@ impl Theme {
         ctx.data_mut(|d| d.insert_temp(Self::id(), Arc::new(self)));
     }
 
-    /// The installed theme, or [`Theme::default`] if none was installed.
-    /// Cheap: it clones an `Arc`.
+    /// The installed theme, or a cached [`Theme::default`] if none was installed.
+    /// Cheap after the first lookup: it clones an `Arc`. This lookup does not
+    /// install fonts or change egui's styles; call [`Theme::install`] for that.
     #[must_use]
     pub fn of(ctx: &Context) -> Arc<Theme> {
-        ctx.data(|d| d.get_temp::<Arc<Theme>>(Self::id())).unwrap_or_default()
+        ctx.data_mut(|d| Arc::clone(d.get_temp_mut_or_default::<Arc<Theme>>(Self::id())))
     }
 
     /// egui's own widgets (labels, text edits, combo boxes, windows) in this
@@ -276,15 +303,30 @@ mod tests {
     #[test]
     fn reduced_motion_restores_the_callers_duration() {
         let ctx = Context::default();
-        ctx.global_style_mut(|style| style.animation_time = 0.37);
+        let dark_scroll = egui::style::ScrollAnimation::duration(0.43);
+        let light_scroll = egui::style::ScrollAnimation::duration(0.79);
+        ctx.style_mut_of(egui::Theme::Dark, |style| {
+            style.animation_time = 0.37;
+            style.scroll_animation = dark_scroll;
+        });
+        ctx.style_mut_of(egui::Theme::Light, |style| style.scroll_animation = light_scroll);
         set_reduced_motion(&ctx, true);
         set_reduced_motion(&ctx, true);
-        assert!(ctx.style_of(ctx.theme()).animation_time.abs() < f32::EPSILON);
+        for mode in [egui::Theme::Dark, egui::Theme::Light] {
+            let style = ctx.style_of(mode);
+            assert!(style.animation_time.abs() < f32::EPSILON);
+            assert_eq!(style.scroll_animation, egui::style::ScrollAnimation::none());
+        }
         Theme::default().install_with_mode(&ctx, egui::Theme::Light);
         assert!(ctx.global_style().animation_time.abs() < f32::EPSILON);
+        assert_eq!(ctx.global_style().scroll_animation, egui::style::ScrollAnimation::none());
         set_reduced_motion(&ctx, false);
         assert!((ctx.style_of(egui::Theme::Dark).animation_time - 0.37).abs() < f32::EPSILON);
         assert!(ctx.style_of(egui::Theme::Light).animation_time > 0.0);
+        assert_eq!(ctx.style_of(egui::Theme::Dark).scroll_animation, dark_scroll);
+        assert_eq!(ctx.style_of(egui::Theme::Light).scroll_animation, light_scroll);
+        set_reduced_motion(&ctx, false);
+        assert_eq!(ctx.style_of(egui::Theme::Light).scroll_animation, light_scroll);
     }
 
     #[test]
@@ -298,6 +340,7 @@ mod tests {
     fn installing_a_theme_replaces_the_one_widgets_read() {
         let ctx = Context::default();
         assert_eq!(Theme::of(&ctx).name, Theme::default().name);
+        assert!(Arc::ptr_eq(&Theme::of(&ctx), &Theme::of(&ctx)));
         Theme::deep_space().install(&ctx);
         assert_eq!(Theme::of(&ctx).palette, Palette::DEEP_SPACE);
         Theme::carbon_copper().install(&ctx);

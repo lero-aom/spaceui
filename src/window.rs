@@ -76,7 +76,7 @@ mod screenshot {
         error::Error,
         fmt,
         path::{Path, PathBuf},
-        sync::{Arc, Mutex},
+        sync::{Arc, Mutex, PoisonError},
     };
 
     /// A screenshot could not be encoded or written.
@@ -131,10 +131,18 @@ mod screenshot {
     /// # let _ = App { screenshot: Screenshot::from_env("MYAPP_SCREENSHOT") };
     /// ```
     #[derive(Debug)]
+    #[must_use = "call update or try_update each frame to drive the screenshot run"]
     pub struct Screenshot {
         path: PathBuf,
-        frames: u64,
+        state: CaptureState,
         outcome: Arc<Mutex<Option<Result<(), ScreenshotError>>>>,
+    }
+
+    #[derive(Debug)]
+    enum CaptureState {
+        Settling(u8),
+        Requested,
+        Finished,
     }
 
     impl Screenshot {
@@ -145,9 +153,8 @@ mod screenshot {
         }
 
         /// A screenshot run saving to `path`.
-        #[must_use]
         pub fn new(path: PathBuf) -> Self {
-            Self { path, frames: 0, outcome: Arc::default() }
+            Self { path, state: CaptureState::Settling(0), outcome: Arc::default() }
         }
 
         /// Call once per frame, after drawing. Returns the outcome once the PNG is
@@ -157,35 +164,55 @@ mod screenshot {
         }
 
         /// Like [`Self::update`], preserving the error type and its source.
+        /// After eight settling frames, requests one capture and waits for the
+        /// backend callback without continuously repainting. Completion closes
+        /// the captured viewport and returns its outcome exactly once.
         ///
         /// # Errors
         /// The returned outcome reports invalid image buffers or encoding/I/O
         /// failures. `None` means the capture has not completed (or was consumed).
         pub fn try_update(&mut self, ctx: &Context) -> Option<Result<(), ScreenshotError>> {
             // A few frames let fonts, textures and layout settle.
-            const SETTLE_FRAMES: u64 = 8;
-            self.frames += 1;
-            if self.frames == SETTLE_FRAMES {
+            const SETTLE_FRAMES: u8 = 8;
+            if matches!(self.state, CaptureState::Finished) {
+                return None;
+            }
+            let result = self.outcome.lock().unwrap_or_else(PoisonError::into_inner).take();
+            if result.is_some() {
+                self.state = CaptureState::Finished;
+                return result;
+            }
+            let CaptureState::Settling(frames) = &mut self.state else {
+                return None;
+            };
+            *frames += 1;
+            if *frames == SETTLE_FRAMES {
+                self.state = CaptureState::Requested;
                 let (path, outcome, closer) = (self.path.clone(), self.outcome.clone(), ctx.clone());
+                let viewport = ctx.viewport_id();
                 ctx.request_screenshot(move |image| {
                     let result = save_png(&image, &path);
-                    if let Ok(mut slot) = outcome.lock() {
-                        *slot = Some(result);
-                    }
-                    closer.send_viewport_cmd(ViewportCommand::Close);
+                    *outcome.lock().unwrap_or_else(PoisonError::into_inner) = Some(result);
+                    // The callback may run after another viewport became current.
+                    // Sending the command also wakes the captured viewport.
+                    closer.send_viewport_cmd_to(viewport, ViewportCommand::Close);
                 });
+            } else {
+                ctx.request_repaint();
             }
-            ctx.request_repaint();
-            self.outcome.lock().ok().and_then(|mut slot| slot.take())
+            None
         }
     }
 
     fn save_png(image: &ColorImage, path: &Path) -> Result<(), ScreenshotError> {
         let [width, height] = image.size;
-        let data: Vec<u8> = image.pixels.iter().flat_map(Color32::to_array).collect();
+        if width.checked_mul(height) != Some(image.pixels.len()) {
+            return Err(ScreenshotError::InvalidImage);
+        }
         let width = u32::try_from(width).map_err(|_| ScreenshotError::InvalidImage)?;
         let height = u32::try_from(height).map_err(|_| ScreenshotError::InvalidImage)?;
         let size = resvg::tiny_skia::IntSize::from_wh(width, height).ok_or(ScreenshotError::InvalidImage)?;
+        let data: Vec<u8> = image.pixels.iter().flat_map(Color32::to_array).collect();
         let pixmap = resvg::tiny_skia::Pixmap::from_vec(data, size).ok_or(ScreenshotError::InvalidImage)?;
         pixmap
             .save_png(path)
@@ -195,6 +222,67 @@ mod screenshot {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use egui::{RawInput, ViewportId};
+        use std::time::Duration;
+
+        #[test]
+        fn invalid_screenshot_buffers_are_rejected_before_writing() {
+            let path = std::env::temp_dir().join("spaceui-invalid-shot.png");
+            for size in [[0, 1], [1, 0], [usize::MAX, 2], [3, 2]] {
+                let mut image = ColorImage::new([1, 1], vec![Color32::WHITE]);
+                image.size = size;
+                assert!(matches!(save_png(&image, &path), Err(ScreenshotError::InvalidImage)));
+            }
+        }
+
+        #[test]
+        fn capture_is_one_shot_and_closes_its_original_viewport_without_busy_repainting() {
+            let path = std::env::temp_dir().join(format!("spaceui-shot-lifecycle-{}.png", std::process::id()));
+            let mut shot = Screenshot::new(path.clone());
+            let ctx = Context::default();
+            let viewport = ViewportId::from_hash_of("screenshot-child");
+            let input = || {
+                let mut input = RawInput { viewport_id: viewport, ..RawInput::default() };
+                input
+                    .viewports
+                    .insert(viewport, egui::ViewportInfo { parent: Some(ViewportId::ROOT), ..Default::default() });
+                input
+            };
+            let mut callbacks = Vec::new();
+            for _ in 0..12 {
+                let output = ctx.run_ui(input(), |ui| assert!(shot.try_update(ui.ctx()).is_none()));
+                callbacks.extend(output.viewport_output[&viewport].commands.iter().filter_map(|command| {
+                    if let ViewportCommand::Screenshot(callback) = command { Some(callback.clone()) } else { None }
+                }));
+                output.drop_without_applying_deltas();
+            }
+            assert_eq!(callbacks.len(), 1, "only one request while waiting for the backend");
+            let output = ctx.run_ui(input(), |ui| assert!(shot.try_update(ui.ctx()).is_none()));
+            assert_eq!(output.viewport_output[&viewport].repaint_delay, Duration::MAX);
+            output.drop_without_applying_deltas();
+
+            // The backend completes the capture after the root viewport ran.
+            ctx.run_ui(RawInput::default(), |_| {}).drop_without_applying_deltas();
+            callbacks
+                .pop()
+                .expect("capture requested")
+                .complete(Arc::new(ColorImage::new([1, 1], vec![Color32::WHITE])));
+            let output = ctx.run_ui(input(), |ui| {
+                assert!(shot.try_update(ui.ctx()).expect("completed outcome").is_ok());
+                assert!(shot.try_update(ui.ctx()).is_none(), "outcome is consumed once");
+            });
+            assert!(output.viewport_output[&viewport].commands.contains(&ViewportCommand::Close));
+            assert!(!output.viewport_output[&ViewportId::ROOT].commands.contains(&ViewportCommand::Close));
+            output.drop_without_applying_deltas();
+            // Let egui's own repaint bookkeeping settle after the close command.
+            for _ in 0..4 {
+                ctx.run_ui(input(), |ui| assert!(shot.try_update(ui.ctx()).is_none())).drop_without_applying_deltas();
+            }
+            let output = ctx.run_ui(input(), |ui| assert!(shot.try_update(ui.ctx()).is_none()));
+            assert_eq!(output.viewport_output[&viewport].repaint_delay, Duration::MAX);
+            output.drop_without_applying_deltas();
+            std::fs::remove_file(path).expect("remove screenshot");
+        }
 
         #[test]
         fn screenshots_are_written_as_png() {

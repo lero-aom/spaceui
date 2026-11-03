@@ -4,6 +4,8 @@
 //! space in the [`Ui`](egui::Ui) and, where it is interactive, returns egui's
 //! [`Response`](egui::Response), so the usual `.clicked()`, `.on_hover_text()`
 //! and popup helpers work.
+//! Install a [`Theme`](crate::Theme::install) before the first UI frame to
+//! configure the fonts and egui styles used by these controls.
 //!
 //! Controls publish accessible roles and values and show a keyboard focus
 //! outline. Buttons activate with Enter/Space; tabs and segmented controls
@@ -33,6 +35,24 @@
 //!     widgets::badge(ui, Icon::Shield, "Read-only", Tone::Positive);
 //!     widgets::chip(ui, "PAPER", Tone::Warning);
 //! });
+//! # }).drop_without_applying_deltas();
+//! ```
+//!
+//! Name input controls through a visible label or an accessible name:
+//!
+//! ```
+//! # use spaceui::{Theme, egui, widgets};
+//! # let ctx = egui::Context::default();
+//! # Theme::default().install(&ctx);
+//! # let (mut notifications, mut effort, mut query) = (true, 2, String::new());
+//! # ctx.run_ui(Default::default(), |ui| {
+//! ui.horizontal(|ui| {
+//!     let label = ui.label("Notifications");
+//!     widgets::switch(ui, &mut notifications).labelled_by(label.id);
+//! });
+//! widgets::notches_labeled(ui, 160.0, 5, &mut effort, "Effort");
+//! widgets::text_field_id(ui, "search", &mut query, "Search…")
+//!     .accessible_name("Symbol search");
 //! # }).drop_without_applying_deltas();
 //! ```
 //!

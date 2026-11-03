@@ -62,12 +62,14 @@ fn push_button(ui: &mut Ui, label: &str, accent: bool) -> Response {
 
 /// A square icon button. Its accessible name defaults to the icon's name;
 /// use [`icon_button_labeled`] for an action-specific or translated name.
+/// `size` is in points, clamped to at least one; non-finite sizes use 28.
 #[cfg(feature = "svg")]
 pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32) -> Response {
     icon_button_labeled(ui, icon, size, icon.name())
 }
 
 /// An icon button with an accessible action name and matching tooltip.
+/// Size normalization matches [`icon_button`].
 #[cfg(feature = "svg")]
 pub fn icon_button_labeled(ui: &mut Ui, icon: Icon, size: f32, label: &str) -> Response {
     let theme = Theme::of(ui.ctx());

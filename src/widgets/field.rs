@@ -12,6 +12,9 @@ pub fn text_field(ui: &mut Ui, text: &mut String, hint: &str) -> Response {
 
 /// A text field with a stable, caller-supplied identity within the current UI
 /// scope. Use a record or field key to preserve focus through layout changes.
+/// The salt must be unique within that scope; use [`Ui::push_id`] for repeated
+/// forms with the same field keys. See the [module example](super) for naming
+/// a field for assistive technology.
 pub fn text_field_id(
     ui: &mut Ui,
     id_salt: impl std::hash::Hash + std::fmt::Debug,

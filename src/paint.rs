@@ -29,9 +29,12 @@ pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
 /// Points around a rounded rectangle, clockwise from the top-left corner,
 /// with enough segments per corner that arcs stay round at `pixels_per_point`:
 /// a chord strays at most about 0.1 px from the true arc.
+/// Empty, non-finite or overflowing geometry produces no points. Negative
+/// radii are clamped to zero; display density must be finite and positive.
 #[must_use]
 pub fn rounded_rect_points(rect: Rect, radius: f32, pixels_per_point: f32) -> Vec<Pos2> {
     if !rect.is_finite()
+        || !rect.size().is_finite()
         || !rect.is_positive()
         || !radius.is_finite()
         || !pixels_per_point.is_finite()
@@ -149,6 +152,7 @@ pub fn gradient_h(painter: &Painter, rect: Rect, left: Color32, right: Color32, 
 }
 
 /// A soft disc fading from `color` at `alpha` in the centre to nothing.
+/// Non-finite/overflowing geometry or a non-positive radius paints nothing.
 pub fn radial_glow(painter: &Painter, center: Pos2, radius: f32, color: Color32, alpha: u8) {
     const SEGMENTS: u32 = 48;
     if !center.is_finite() || !radius.is_finite() || radius <= 0.0 {
@@ -164,12 +168,28 @@ pub fn radial_glow(painter: &Painter, center: Pos2, radius: f32, color: Color32,
     for i in 0..SEGMENTS {
         mesh.add_triangle(0, 1 + i, 1 + (i + 1) % SEGMENTS);
     }
-    painter.add(mesh);
+    if mesh.vertices.iter().all(|vertex| vertex.pos.is_finite()) {
+        painter.add(mesh);
+    }
 }
 
 /// A soft outer glow around a rounded rectangle, from stacked strokes.
+/// Empty/non-finite/overflowing geometry or negative radii/spreads paint nothing.
 pub fn glow(painter: &Painter, rect: Rect, radius: f32, color: Color32, spread: f32) {
     const STEPS: u8 = 6;
+    if !rect.is_finite()
+        || !rect.is_positive()
+        || !rect.size().is_finite()
+        || !radius.is_finite()
+        || radius < 0.0
+        || !spread.is_finite()
+        || spread < 0.0
+        || !(radius + spread).is_finite()
+        || !rect.expand(spread).is_finite()
+        || !rect.expand(spread).size().is_finite()
+    {
+        return;
+    }
     for step in 0..STEPS {
         let t = f32::from(step) / f32::from(STEPS);
         let grow = spread * (1.0 - t);
@@ -183,8 +203,12 @@ pub fn glow(painter: &Painter, rect: Rect, radius: f32, color: Color32, spread: 
 }
 
 /// A four-pointed sparkle (the "thinking" glyph) with curved flanks.
+/// Non-finite geometry or a non-positive radius paints nothing.
 pub fn sparkle(painter: &Painter, center: Pos2, radius: f32, color: Color32) {
     const STEPS: usize = 12;
+    if !center.is_finite() || !radius.is_finite() || radius <= 0.0 {
+        return;
+    }
     let tips = [vec2(0.0, -radius), vec2(radius, 0.0), vec2(0.0, radius), vec2(-radius, 0.0)];
     let pull = radius * 0.12;
     let mut points = Vec::with_capacity(4 * STEPS);
@@ -277,5 +301,31 @@ mod tests {
         let mut points = vec![Pos2::ZERO, pos2(0.0, 10.0)];
         points.extend((0..10_000).map(|i| pos2(if i % 2 == 0 { 0.9e-6 } else { -0.9e-6 }, 0.0)));
         assert!(polygon_mesh(&points, 1.0, |_| Color32::WHITE).is_empty());
+    }
+
+    #[test]
+    fn finite_coordinates_with_overflowing_extents_are_rejected() {
+        let rect = Rect::from_min_max(pos2(-f32::MAX, -f32::MAX), pos2(f32::MAX, f32::MAX));
+        assert!(rounded_rect_points(rect, f32::MAX, 2.0).is_empty());
+        assert!(gradient_mesh(rect, Color32::WHITE, Color32::BLACK, f32::MAX, 2.0).is_empty());
+    }
+
+    #[test]
+    fn decorative_painters_ignore_invalid_and_overflowing_geometry() {
+        let ctx = egui::Context::default();
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let painter = ui.painter();
+            let rect = Rect::from_min_size(Pos2::ZERO, Vec2::splat(10.0));
+            for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0] {
+                radial_glow(painter, Pos2::ZERO, invalid, Color32::WHITE, 128);
+                glow(painter, rect, invalid, Color32::WHITE, 2.0);
+                glow(painter, rect, 2.0, Color32::WHITE, invalid);
+                sparkle(painter, Pos2::ZERO, invalid, Color32::WHITE);
+            }
+            radial_glow(painter, pos2(f32::MAX, f32::MAX), f32::MAX, Color32::WHITE, 128);
+            glow(painter, rect, 2.0, Color32::WHITE, f32::MAX);
+        });
+        assert!(output.shapes.iter().all(|clipped| matches!(clipped.shape, egui::Shape::Noop)));
+        output.drop_without_applying_deltas();
     }
 }

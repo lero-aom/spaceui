@@ -1,0 +1,6 @@
+# actionlint 1.7.12 predates this GitHub-hosted image. Its extra-label mechanism
+# also accepts newer hosted labels; this does not configure a self-hosted runner.
+# https://github.com/actions/runner-images#available-images
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

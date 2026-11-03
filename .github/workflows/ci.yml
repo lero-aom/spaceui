@@ -65,16 +65,29 @@ jobs:
 
   visual:
     name: Rendered regression snapshots
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       WGPU_BACKEND: vulkan
+      SPACEUI_SNAPSHOT_PROFILE: linux-vulkan
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - name: Install software Vulkan renderer
-        run: sudo apt-get install -y mesa-vulkan-drivers
+        run: sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+      - name: Select and describe Mesa lavapipe
+        shell: bash
+        run: |
+          shopt -s nullglob
+          icds=(/usr/share/vulkan/icd.d/lvp*.json)
+          if [ "${#icds[@]}" -ne 1 ]; then
+            echo "Expected one Mesa lavapipe ICD, found ${#icds[@]}" >&2
+            exit 1
+          fi
+          export VK_DRIVER_FILES="${icds[0]}"
+          echo "VK_DRIVER_FILES=$VK_DRIVER_FILES" >> "$GITHUB_ENV"
+          vulkaninfo --summary
       - run: cargo test --locked --test visual --all-features
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()

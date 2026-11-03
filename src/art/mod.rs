@@ -19,8 +19,9 @@
 //! let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::Vec2::splat(32.0));
 //! LOGO.paint(ui.painter(), rect, egui::Color32::WHITE);
 //! # }).drop_without_applying_deltas();
-//! let window_icon = LOGO.window_icon(256).expect("valid SVG");
+//! let window_icon = LOGO.try_window_icon(256)?;
 //! assert_eq!(window_icon.width, 256);
+//! # Ok::<(), spaceui::art::SvgError>(())
 //! ```
 //!
 //! [resvg]: https://github.com/linebender/resvg
@@ -47,7 +48,8 @@ pub enum SvgError {
     InvalidSize(u32),
     /// The SVG parser rejected the document; includes its diagnostic.
     InvalidDocument(String),
-    /// The raster image could not be allocated.
+    /// The raster backing buffer could not be constructed. This does not
+    /// represent every failure of the process's global allocator.
     AllocationFailed,
 }
 
@@ -110,24 +112,27 @@ impl Svg {
         let _ = self.try_paint(painter, rect, tint);
     }
 
-    /// Paints SVG art, reporting invalid documents or raster allocation errors.
-    /// Empty or non-finite rectangles are ignored.
+    /// Paints SVG art, reporting invalid documents or raster-construction errors.
+    /// Empty, non-finite or overflowing rectangles are ignored.
     ///
     /// # Errors
     /// Returns [`SvgError`] when the document cannot be rasterized.
     pub fn try_paint(self, painter: &Painter, rect: Rect, tint: Color32) -> Result<(), SvgError> {
-        if !rect.is_finite() || !rect.is_positive() {
+        if !rect.is_finite() || !rect.size().is_finite() || !rect.is_positive() {
             return Ok(());
         }
         // Whole pixels: art sampled between pixels looks soft.
         let rect = rect.round_to_pixels(painter.pixels_per_point());
+        if !rect.is_finite() || !rect.size().is_finite() || !rect.is_positive() {
+            return Ok(());
+        }
         let texture = texture(painter.ctx(), self, rect.width().max(rect.height()))?;
         painter.image(texture.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), tint);
         Ok(())
     }
 
     /// Rasterizes to a square image `px` pixels wide (premultiplied alpha),
-    /// or `None` for an invalid document, size, or allocation failure.
+    /// or `None` for an invalid document, size, or rejected raster buffer.
     /// Use [`Self::try_rasterize`] for diagnostics.
     #[must_use]
     pub fn rasterize(self, px: u32) -> Option<ColorImage> {
@@ -138,8 +143,10 @@ impl Svg {
     ///
     /// # Errors
     /// Rejects dimensions outside `1..=MAX_RASTER_SIZE`, invalid SVG, and
-    /// failed image allocation. Source parsing runs synchronously; applications
-    /// handling untrusted documents should also limit source length/complexity.
+    /// rejected raster buffers. These bounds limit image dimensions; they do
+    /// not make process-wide memory exhaustion recoverable. Source parsing runs
+    /// synchronously; applications handling untrusted documents should also
+    /// limit source length/complexity.
     pub fn try_rasterize(self, px: u32) -> Result<ColorImage, SvgError> {
         if !(1..=MAX_RASTER_SIZE).contains(&px) {
             return Err(SvgError::InvalidSize(px));
@@ -266,6 +273,20 @@ mod tests {
         assert!(matches!(DOT.try_rasterize(0), Err(SvgError::InvalidSize(0))));
         assert!(matches!(DOT.try_rasterize(MAX_RASTER_SIZE + 1), Err(SvgError::InvalidSize(_))));
         assert!(matches!(Svg::new("bad", "<svg").try_rasterize(16), Err(SvgError::InvalidDocument(_))));
+    }
+
+    #[test]
+    fn invalid_paint_rectangles_do_not_allocate_textures() {
+        let ctx = Context::default();
+        let painter = ctx.layer_painter(egui::LayerId::background());
+        for rect in [
+            Rect::from_min_max(pos2(-f32::MAX, -f32::MAX), pos2(f32::MAX, f32::MAX)),
+            Rect::from_min_max(pos2(1.0, 1.0), pos2(0.0, 0.0)),
+            Rect::from_min_size(pos2(0.0, 0.0), egui::Vec2::splat(0.01)),
+        ] {
+            DOT.try_paint(&painter, rect, Color32::WHITE).expect("ignored rectangle");
+            assert_eq!(cache_stats(&ctx), CacheStats::default());
+        }
     }
 
     #[test]

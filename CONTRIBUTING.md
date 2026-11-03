@@ -31,6 +31,32 @@ the workspace; it checks the minimal example and runs a core-only frame without 
 
 The crate enables `missing_docs`, `missing_debug_implementations`, `unreachable_pub` and clippy's `pedantic` group
 (see `[lints]` in `Cargo.toml`), and denies `unsafe_code` outside the one Windows call in `window.rs`.
+That exception still requires a documented safety argument; unsafe operations inside an unsafe function
+must have an explicit unsafe block.
+
+## Reviewing Rust code
+
+Use the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/checklist.html) as a review
+checklist, alongside [Cargo's compatibility rules](https://doc.rust-lang.org/cargo/reference/semver.html).
+The audit and concrete examples are recorded in [docs/rust-quality.md](docs/rust-quality.md).
+
+- **Correctness and safety are requirements.** Check UTF-8 boundaries, arithmetic overflow, geometry
+  invariants, callback lifetimes and shared-state transitions. Validate external input before allocating
+  or indexing, and add a reproducer for each correctness fix. Every unsafe operation needs an argument
+  covering the actual foreign API contract, pointer lifetime and buffer size.
+- **Public contracts must match behavior.** Document normalization, errors, panics and feature gates.
+  Preserve useful error sources and distinguish invalid input from pending asynchronous work. Review
+  changes to public fields, trait implementations and auto traits as compatibility changes.
+- **Ownership should reflect the work.** Borrow data needed only for a call; own data retained afterwards.
+  Share immutable assets when clones would copy large buffers. Keep filesystem work and external
+  callbacks outside locks. Use explicit states for asynchronous lifecycles instead of unbounded counters.
+- **API conventions need judgment.** Implement useful standard traits, use standard naming and conversions,
+  and mark builders or values whose ignored result is a mistake with `#[must_use]`. Do not add traits,
+  generic parameters, serialization dependencies or abstractions solely to fill a checklist.
+- **Lints supplement review.** Keep fmt, strict Clippy, rustdoc, feature and MSRV checks passing.
+  [Clippy's guidance](https://doc.rust-lang.org/clippy/usage.html) explicitly discourages enabling its
+  entire restriction group. Use narrow, explained exceptions when a lint conflicts with intentional
+  graphics code; test invariants rather than banning every index or justified internal assertion.
 
 For visual changes, attach screenshots of the gallery in both themes:
 
@@ -45,6 +71,19 @@ generated difference images when a test fails. If the change is intentional, run
 `UPDATE_SNAPSHOTS=force cargo test --test visual --all-features`, inspect every changed PNG, and commit
 the approved baselines with the code. Never set `UPDATE_SNAPSHOTS` in CI. A passing snapshot is not a
 substitute for checking keyboard navigation, screen-reader labels, IME composition or native window behavior.
+
+The shell's translucent backdrops have separate `tests/snapshots/linux-vulkan/` baselines because GPU
+drivers round layered blends differently. Their initial images came from CI run `41739890569`, commit
+`d7f5097`, on Ubuntu 26.04 runner image `20261101.186`; all four were reviewed against the original
+baselines (RGB differences of at most 3/255, with matching text and geometry). The visual job selects
+Mesa lavapipe's Vulkan ICD explicitly and logs `vulkaninfo --summary`. It sets
+`SPACEUI_SNAPSHOT_PROFILE=linux-vulkan`; without that variable tests use the original baselines.
+Unknown profiles and use of the Linux profile on another OS are errors. Both profiles keep the default
+pixel tolerance and allow zero failed pixels. Controls, chat and focus snapshots remain shared.
+To update the Linux shell baselines, use Ubuntu 26.04 with Mesa lavapipe, set `VK_DRIVER_FILES` to the
+installed `/usr/share/vulkan/icd.d/lvp*.json` file as in CI, then run
+`SPACEUI_SNAPSHOT_PROFILE=linux-vulkan WGPU_BACKEND=vulkan UPDATE_SNAPSHOTS=force cargo test --locked --test visual --all-features shell_at_normal_and_constrained_sizes`.
+Review the new images and record renderer upgrades alongside any resulting baseline changes.
 
 For performance changes, record the benchmark output, Rust version, build mode, platform and workload.
 Compare before and after on the same machine. Hosted-runner timings are not stable enough for a universal

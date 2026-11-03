@@ -284,6 +284,29 @@ fn custom_text_sizes_expand_controls() {
 }
 
 #[test]
+fn choice_groups_report_one_selection_in_the_click_frame() {
+    use spaceui::egui::accesskit::Toggled;
+    for segmented in [false, true] {
+        let mut harness = accessible_harness(0, move |ui, selected| {
+            if segmented {
+                widgets::segmented(ui, selected, &["First", "Second", "Third"]);
+            } else {
+                widgets::tabs(ui, selected, &["First", "Second", "Third"]);
+            }
+        });
+        harness.get_by_label("Third").click();
+        harness.step();
+        assert_eq!(*harness.state(), 2);
+        for label in ["First", "Second", "Third"] {
+            let node = harness.get_by_label(label).accesskit_node();
+            let selected =
+                if segmented { node.toggled() == Some(Toggled::True) } else { node.is_selected() == Some(true) };
+            assert_eq!(selected, label == "Third", "{label}, segmented={segmented}");
+        }
+    }
+}
+
+#[test]
 fn primary_buttons_render_the_on_accent_foreground() {
     use spaceui::egui::{Color32, Context, epaint::Primitive};
     let ctx = Context::default();

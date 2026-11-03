@@ -124,7 +124,7 @@ type TitleStatus<'a> = Box<dyn FnOnce(&mut Ui) + 'a>;
 type Column<'a> = (&'a mut f32, RangeInclusive<f32>);
 
 /// Builder for the window shell. Build and show it from the root `Ui` every
-/// frame.
+/// frame, using one shell per egui viewport.
 ///
 /// ```
 /// use spaceui::{Icon, RailItem, Shell, Theme, egui, widgets, widgets::Tone};
@@ -215,6 +215,9 @@ impl<'a> Shell<'a> {
     /// pages only. Without a rail (or with no items), the space goes to the
     /// cards. Overflow scrolls vertically. Up/Down and Home/End select and
     /// reveal a page while the rail has keyboard focus.
+    /// When `items` is non-empty, an out-of-range page is clamped to the last
+    /// page, or zero for a rail containing only dividers. An empty rail leaves
+    /// the caller's page unchanged.
     pub fn rail(mut self, items: &'a [RailItem]) -> Self {
         self.rail = items;
         self
@@ -223,6 +226,9 @@ impl<'a> Shell<'a> {
     /// A column left of the main card (after the rail), resizable within
     /// `range`. The app keeps, and may persist, its width. A focused divider
     /// moves ten points with Left/Right; Home/End choose the width limits.
+    /// Negative or non-finite widths and range endpoints are treated as zero
+    /// before clamping. A reversed range collapses to its normalized lower
+    /// bound. The available window space can reduce both bounds further.
     pub fn left_column(mut self, width: &'a mut f32, range: RangeInclusive<f32>) -> Self {
         self.left = Some((width, range));
         self
@@ -232,12 +238,14 @@ impl<'a> Shell<'a> {
     /// keeps, and may persist, its width. Keyboard behavior matches
     /// [`left_column`](Self::left_column); screen-reader increment/decrement
     /// actions always increase/decrease the column's width.
+    /// Width and range normalization also match [`left_column`](Self::left_column).
     pub fn right_column(mut self, width: &'a mut f32, range: RangeInclusive<f32>) -> Self {
         self.right = Some((width, range));
         self
     }
 
     /// A status line `height` points tall under the cards.
+    /// A non-positive or non-finite height hides it.
     pub fn status_bar(mut self, height: f32) -> Self {
         self.status = height;
         self
@@ -258,7 +266,8 @@ impl<'a> Shell<'a> {
     }
 
     /// Paints the window and handles its interaction. `page` is the selected
-    /// rail page, updated when the owner clicks another one.
+    /// rail page, updated by pointer or keyboard input and normalized as
+    /// described by [`rail`](Self::rail).
     ///
     /// A column is clamped to its range and to half the window, or to 35% of
     /// it when there are columns on both sides. Available space takes priority

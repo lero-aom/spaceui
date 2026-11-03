@@ -346,3 +346,38 @@ fn title_buttons_remain_usable_above_a_modal() {
     let commands = &harness.output().viewport_output[&ViewportId::ROOT].commands;
     assert!(commands.iter().any(|command| matches!(command, spaceui::egui::ViewportCommand::Minimized(true))));
 }
+
+#[test]
+fn the_rail_reports_one_selection_in_the_click_frame() {
+    let mut harness = accessible_shell(vec2(900.0, 600.0), 0, |ui, page| {
+        let _ = Shell::new("Selection").rail(RAIL).show(ui, page);
+    });
+    harness.get_by_label("Settings").click();
+    harness.step();
+    assert_eq!(*harness.state(), 2);
+    for label in ["Home", "Markets", "Settings"] {
+        assert_eq!(harness.get_by_label(label).accesskit_node().is_selected(), Some(label == "Settings"));
+    }
+}
+
+#[test]
+fn shell_normalizes_invalid_state_without_user_input() {
+    let mut harness = Harness::new();
+    let mut page = usize::MAX;
+    let mut width = f32::NAN;
+    let shown = regions(&mut harness, |ui| {
+        Shell::new("Bounds")
+            .rail(RAIL)
+            .left_column(&mut width, 400.0..=200.0)
+            .status_bar(f32::INFINITY)
+            .show(ui, &mut page)
+    });
+    assert_eq!(page, 2);
+    assert!((width - 400.0).abs() < f32::EPSILON);
+    assert!(shown.status.is_none());
+    let _ = regions(&mut harness, |ui| Shell::new("Dividers").rail(&[RailItem::Divider]).show(ui, &mut page));
+    assert_eq!(page, 0);
+    page = 7;
+    let _ = regions(&mut harness, |ui| Shell::new("No rail").rail(&[]).show(ui, &mut page));
+    assert_eq!(page, 7);
+}

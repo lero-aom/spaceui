@@ -76,6 +76,8 @@ pub fn badge(ui: &mut Ui, icon: Icon, text: &str, tone: Tone) -> Response {
 
 /// A borderless dropdown trigger with a chevron, as under a chat composer
 /// ("● Claude · Opus ⌄"); the text is cut with an ellipsis at `max_width`.
+/// This limit applies to the text; the dot, chevron and padding add width.
+/// Negative limits become zero; non-finite limits use the available UI width.
 /// Pair it with [`egui::Popup::menu`]:
 ///
 /// ```

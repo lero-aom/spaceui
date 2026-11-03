@@ -59,6 +59,7 @@ fn render(ui: &mut Ui, items: &[RailItem], page: &mut usize, group: Id, width: f
     let previous = ui.ctx().data(|data| data.get_temp::<usize>(selected_id));
     let mut y = origin.y + 4.0;
     let mut index = 0;
+    let mut choices = Vec::with_capacity(offsets.len());
     for item in items {
         let RailItem::Page { icon, label } = *item else {
             let half_width = 16.0_f32.min(width * 0.5);
@@ -80,6 +81,12 @@ fn render(ui: &mut Ui, items: &[RailItem], page: &mut usize, group: Id, width: f
         if old != *page {
             response.mark_changed();
         }
+        choices.push((icon, label, tile, response));
+        index += 1;
+        y += tile_size + 10.0;
+    }
+    // Publish the final selection only after every tile has handled input.
+    for (index, (icon, label, tile, response)) in choices.into_iter().enumerate() {
         let active = *page == index;
         response.widget_info(|| WidgetInfo::labeled(Role::Tab, ui.is_enabled(), label));
         ui.ctx().accesskit_node_builder(response.id, |node| node.set_selected(active));
@@ -88,8 +95,6 @@ fn render(ui: &mut Ui, items: &[RailItem], page: &mut usize, group: Id, width: f
         }
         paint_tile(ui, tile, icon, active, &response);
         response.on_hover_text(label);
-        index += 1;
-        y += tile_size + 10.0;
     }
     ui.ctx().data_mut(|data| data.insert_temp(selected_id, *page));
 }

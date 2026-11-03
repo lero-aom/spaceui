@@ -28,6 +28,7 @@ pub fn tabs(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
     ui.skip_ahead_auto_ids(1);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
+        let mut choices = Vec::with_capacity(labels.len());
         for (i, label) in labels.iter().enumerate() {
             let active = *selected == i;
             let font = if active { semibold(super::text_size(ui, 14.0)) } else { super::text_font(ui, 14.0) };
@@ -36,7 +37,14 @@ pub fn tabs(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
             let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
             let mut response = ui.interact(rect, group.with(i), Sense::click());
             select(ui, &mut response, i, selected, labels.len(), group);
-            response.widget_info(|| WidgetInfo::labeled(Role::Tab, ui.is_enabled(), *label));
+            choices.push((*label, rect, response));
+        }
+        // Resolve every interaction before publishing the group's selection.
+        // A later click must clear an earlier choice in this same frame.
+        for (i, (label, rect, response)) in choices.into_iter().enumerate() {
+            let active = *selected == i;
+            let font = if active { semibold(super::text_size(ui, 14.0)) } else { super::text_font(ui, 14.0) };
+            response.widget_info(|| WidgetInfo::labeled(Role::Tab, ui.is_enabled(), label));
             ui.ctx().accesskit_node_builder(response.id, |node| node.set_selected(*selected == i));
             let painter = ui.painter();
             if response.hovered() && !active {
@@ -49,7 +57,7 @@ pub fn tabs(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
             } else {
                 p.text_2
             };
-            painter.text(rect.center() - vec2(0.0, 1.0), Align2::CENTER_CENTER, *label, font, color);
+            painter.text(rect.center() - vec2(0.0, 1.0), Align2::CENTER_CENTER, label, font, color);
             if active {
                 let bar = Rect::from_min_max(
                     pos2(rect.left() + 8.0, rect.bottom() - 2.5),
@@ -82,11 +90,16 @@ pub fn segmented(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
     let mut x = outer.left() + 3.0;
     let old = *selected;
     *selected = (*selected).min(labels.len().saturating_sub(1));
+    let mut choices = Vec::with_capacity(labels.len());
     for (i, (label, width)) in labels.iter().zip(&widths).enumerate() {
         let rect = Rect::from_min_size(pos2(x, outer.top() + 3.0), vec2(*width, outer.height() - 6.0));
         let mut response = ui.interact(rect, outer_response.id.with(i), Sense::click());
         select(ui, &mut response, i, selected, labels.len(), outer_response.id);
-        response.widget_info(|| WidgetInfo::selected(Role::RadioButton, ui.is_enabled(), *selected == i, *label));
+        choices.push((*label, rect, response));
+        x += width;
+    }
+    for (i, (label, rect, response)) in choices.into_iter().enumerate() {
+        response.widget_info(|| WidgetInfo::selected(Role::RadioButton, ui.is_enabled(), *selected == i, label));
         let active = *selected == i;
         if active {
             paint::gradient(ui.painter(), rect, p.accent, p.accent_lo, radius - 2.0);
@@ -100,10 +113,9 @@ pub fn segmented(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
         } else {
             p.text_2
         };
-        ui.painter().text(rect.center(), Align2::CENTER_CENTER, *label, font.clone(), color);
+        ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, font.clone(), color);
         super::focus_ring(ui, &response, (radius - 2.0).max(0.0));
         response.on_hover_cursor(CursorIcon::PointingHand);
-        x += width;
     }
     old != *selected
 }

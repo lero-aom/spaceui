@@ -41,6 +41,23 @@ After painting 384 different SVG sizes, the cache retained 61 entries and
 reported zero entries and zero retained bytes. Unit tests enforce both the
 entry and byte limits; renderer resources and transient uploads are separate.
 
+## Rust code review follow-up
+
+Rerun on 2026-11-04 with the same machine, Rust version, optimized profile and
+allocation workload after borrowing Markdown link metadata:
+
+| Warm workload | Allocations/op | Reallocations/op | Requested bytes/op |
+|---|---:|---:|---:|
+| Cached SVG frame | 20 | 0 | 8,846 |
+| Button frame | 24 | 10 | 11,397 |
+| Inline parse of 100 repeated paragraphs | 8 | 38 | 79,912 |
+
+The inline workload removes 100 allocations per operation; its layout text is
+still owned. This is an allocation measurement, not a new timing claim. Runtime
+font clones also share their immutable bytes; unit tests verify that installation
+and cloning retain the same backing allocation. Cache retention and clearing
+matched the initial measurement.
+
 ## Compare changes
 
 Use the same toolchain, hardware, feature set and workload before and after a

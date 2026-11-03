@@ -32,6 +32,12 @@ follows [Semantic Versioning](https://semver.org/).
 - Inaccessible overflowing chat tabs and rail pages, constrained-region geometry and decorative animation
   when reduced motion is requested.
 - Repeated suffix scans and incomplete-delimiter handling in inline Markdown, with keyboard-accessible links.
+- A Markdown panic on overlapping emphasis delimiters, including a hosted-fuzzer reproducer.
+- Same-frame selection consistency for tabs, segmented controls and rail pages.
+- Font-name collisions between roles, custom regular-font fallback, unnecessary owned-font/link copies,
+  and animated scrolling while reduced motion is enabled.
+- Screenshot capture lifecycle and original-viewport targeting; malformed screenshot buffers, overflowing
+  paint geometry and text that exceeded very narrow regions.
 
 ### Migration notes
 

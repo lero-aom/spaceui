@@ -1,8 +1,26 @@
 //! Rendered regressions with bundled fonts, fixed time, and reduced motion.
 #![cfg(all(feature = "svg", feature = "chat", feature = "shell"))]
 
-use egui_kittest::{Harness, SnapshotResults};
+use egui_kittest::{Harness, SnapshotOptions, SnapshotResults};
 use spaceui::{Fonts, Icon, Theme, chat, egui, theme, widgets};
+
+fn shell_snapshot_options() -> SnapshotOptions {
+    match std::env::var("SPACEUI_SNAPSHOT_PROFILE") {
+        Err(std::env::VarError::NotPresent) => SnapshotOptions::new(),
+        Ok(profile) if profile == "linux-vulkan" && cfg!(target_os = "linux") => {
+            assert_eq!(
+                std::env::var("WGPU_BACKEND").as_deref(),
+                Ok("vulkan"),
+                "linux-vulkan requires WGPU_BACKEND=vulkan"
+            );
+            // Layered translucent backdrops differ slightly between graphics drivers.
+            // CI selects Mesa lavapipe explicitly and uses its reviewed shell baselines.
+            // Both profiles retain kittest's default threshold and failed-pixel limit.
+            SnapshotOptions::new().output_path("tests/snapshots/linux-vulkan")
+        }
+        profile => panic!("unsupported SPACEUI_SNAPSHOT_PROFILE on {}: {profile:?}", std::env::consts::OS),
+    }
+}
 
 fn setup(deep: bool) -> Theme {
     Theme { fonts: Fonts::BUNDLED, ..if deep { Theme::deep_space() } else { Theme::carbon_copper() } }
@@ -104,6 +122,7 @@ fn shell_at_normal_and_constrained_sizes() {
             let mut page = 0;
             let mut side = 320.0;
             let mut harness = Harness::builder()
+                .with_options(shell_snapshot_options())
                 .with_size(egui::vec2(width as f32, 500.0))
                 .with_context_setup(move |ctx| {
                     setup(deep).install(ctx);
