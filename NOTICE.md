@@ -2,7 +2,14 @@
 
 ## Feather Icons
 
-`assets/icons/settings.svg` uses the gear outline from [Feather](https://github.com/feathericons/feather).
+Twelve icons in `assets/icons/` are based on [Feather](https://github.com/feathericons/feather) drawings:
+
+- `settings.svg` is Feather's `settings` gear, with each pair of corner arcs merged into one.
+- `link`, `paperclip`, `camera`, `image`, `external`, `lock`, `unlock`, `eye` and `eye_off` redraw the Feather icons
+  of the same names at a different scale.
+- `book` and `chat` follow Feather's `book-open` and `message-square`.
+
+The rest were drawn for this project; , ,  and  use layouts most icon sets share.
 
 ```
 The MIT License (MIT)
@@ -27,6 +34,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Trademarks
+
+`assets/icons/x_logo.svg` depicts the X logo, a trademark of X Corp. Use it only to refer to X.
 
 ## Fonts
 
