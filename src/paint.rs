@@ -1,0 +1,205 @@
+//! Painting that egui's shapes don't cover: gradients, star-shaped fills and
+//! glows.
+//!
+//! Hand-built meshes get no anti-aliasing from egui, so every fill here adds
+//! the same one-physical-pixel feathered edge egui's tessellator puts around
+//! its own shapes. Edges stay smooth at any display scale.
+//!
+//! ```
+//! use spaceui::{egui, paint};
+//!
+//! # let ctx = egui::Context::default();
+//! # ctx.run_ui(Default::default(), |ui| {
+//! let rect = egui::Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(120.0, 32.0));
+//! // A pill: the radius is half the height.
+//! paint::gradient(ui.painter(), rect, egui::Color32::LIGHT_BLUE, egui::Color32::DARK_BLUE, 16.0);
+//! # }).drop_without_applying_deltas();
+//! ```
+use egui::{Color32, CornerRadius, Mesh, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+
+/// Linear blend of two (premultiplied) colours; `t` is clamped to `0..=1`.
+#[must_use]
+pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let lerp = |from: u8, to: u8| (f32::from(from) + (f32::from(to) - f32::from(from)) * t).round() as u8;
+    Color32::from_rgba_premultiplied(lerp(a.r(), b.r()), lerp(a.g(), b.g()), lerp(a.b(), b.b()), lerp(a.a(), b.a()))
+}
+
+/// Points around a rounded rectangle, clockwise from the top-left corner,
+/// with enough segments per corner that arcs stay round at `pixels_per_point`:
+/// a chord strays at most about 0.1 px from the true arc.
+#[must_use]
+pub fn rounded_rect_points(rect: Rect, radius: f32, pixels_per_point: f32) -> Vec<Pos2> {
+    let radius = radius.min(rect.width() / 2.0).min(rect.height() / 2.0).max(0.0);
+    let corners = [
+        (pos2(rect.left() + radius, rect.top() + radius), 180.0_f32),
+        (pos2(rect.right() - radius, rect.top() + radius), 270.0),
+        (pos2(rect.right() - radius, rect.bottom() - radius), 0.0),
+        (pos2(rect.left() + radius, rect.bottom() - radius), 90.0),
+    ];
+    let pixels = radius * pixels_per_point;
+    let segments = if pixels < 0.5 {
+        0
+    } else {
+        (std::f32::consts::FRAC_PI_2 / (0.8 / pixels).sqrt()).ceil().clamp(2.0, 48.0) as usize
+    };
+    let mut points = Vec::with_capacity(4 * (segments + 1));
+    for (center, start) in corners {
+        for i in 0..=segments {
+            let angle = (start + 90.0 * i as f32 / segments.max(1) as f32).to_radians();
+            points.push(center + vec2(angle.cos(), angle.sin()) * radius);
+        }
+    }
+    points.dedup_by(|a, b| (*a - *b).length_sq() < 1e-4);
+    points
+}
+
+/// A filled polygon (convex, or visible from its centroid) with an
+/// anti-aliased edge `feather` points wide (use `1.0 / pixels_per_point`).
+/// `color_at` colours each vertex; colours linear in position give exact
+/// gradients.
+#[must_use]
+pub fn polygon_mesh(points: &[Pos2], feather: f32, color_at: impl Fn(Pos2) -> Color32) -> Mesh {
+    let mut mesh = Mesh::default();
+    let n = points.len();
+    if n < 3 {
+        return mesh;
+    }
+    let area: f32 = (0..n).map(|i| points[i].x * points[(i + 1) % n].y - points[(i + 1) % n].x * points[i].y).sum();
+    let outward = |from: Pos2, to: Pos2| {
+        let along = (to - from).normalized();
+        if area > 0.0 { vec2(along.y, -along.x) } else { vec2(-along.y, along.x) }
+    };
+    let center = (points.iter().fold(Vec2::ZERO, |sum, p| sum + p.to_vec2()) / n as f32).to_pos2();
+    mesh.colored_vertex(center, color_at(center));
+    for i in 0..n {
+        let (prev, point, next) = (points[(i + n - 1) % n], points[i], points[(i + 1) % n]);
+        let (before, after) = (outward(prev, point), outward(point, next));
+        let bisector = (before + after).normalized();
+        // Mitred so the fringe keeps its width; capped so sharp tips don't spike.
+        let miter = bisector / bisector.dot(before).max(0.35);
+        mesh.colored_vertex(point - miter * (feather * 0.5), color_at(point));
+        mesh.colored_vertex(point + miter * (feather * 0.5), Color32::TRANSPARENT);
+    }
+    for i in 0..n as u32 {
+        let j = (i + 1) % n as u32;
+        let (inner_i, outer_i, inner_j, outer_j) = (1 + 2 * i, 2 + 2 * i, 1 + 2 * j, 2 + 2 * j);
+        mesh.add_triangle(0, inner_i, inner_j);
+        mesh.add_triangle(inner_i, outer_i, outer_j);
+        mesh.add_triangle(inner_i, outer_j, inner_j);
+    }
+    mesh
+}
+
+/// Fills a polygon in one colour with an anti-aliased edge.
+pub fn fill_polygon(painter: &Painter, points: &[Pos2], color: Color32) {
+    painter.add(polygon_mesh(points, 1.0 / painter.pixels_per_point(), |_| color));
+}
+
+/// A vertically graded rounded rectangle, for shapes built before painting
+/// (such as a background placed behind content with `Painter::set`).
+#[must_use]
+pub fn gradient_mesh(rect: Rect, top: Color32, bottom: Color32, radius: f32, pixels_per_point: f32) -> Mesh {
+    let points = rounded_rect_points(rect, radius, pixels_per_point);
+    polygon_mesh(&points, 1.0 / pixels_per_point, |p| mix(top, bottom, (p.y - rect.top()) / rect.height().max(1e-3)))
+}
+
+/// Paints a vertically graded rounded rectangle. A radius of half the height
+/// makes a pill; of half the side of a square, a circle.
+pub fn gradient(painter: &Painter, rect: Rect, top: Color32, bottom: Color32, radius: f32) {
+    painter.add(gradient_mesh(rect, top, bottom, radius, painter.pixels_per_point()));
+}
+
+/// Paints a horizontally graded rounded rectangle.
+pub fn gradient_h(painter: &Painter, rect: Rect, left: Color32, right: Color32, radius: f32) {
+    let pixels_per_point = painter.pixels_per_point();
+    let points = rounded_rect_points(rect, radius, pixels_per_point);
+    painter.add(polygon_mesh(&points, 1.0 / pixels_per_point, |p| {
+        mix(left, right, (p.x - rect.left()) / rect.width().max(1e-3))
+    }));
+}
+
+/// A soft disc fading from `color` at `alpha` in the centre to nothing.
+pub fn radial_glow(painter: &Painter, center: Pos2, radius: f32, color: Color32, alpha: u8) {
+    const SEGMENTS: u32 = 48;
+    let inner = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha);
+    let mut mesh = Mesh::default();
+    mesh.colored_vertex(center, inner);
+    for i in 0..SEGMENTS {
+        let angle = i as f32 / SEGMENTS as f32 * std::f32::consts::TAU;
+        mesh.colored_vertex(center + vec2(angle.cos(), angle.sin()) * radius, Color32::TRANSPARENT);
+    }
+    for i in 0..SEGMENTS {
+        mesh.add_triangle(0, 1 + i, 1 + (i + 1) % SEGMENTS);
+    }
+    painter.add(mesh);
+}
+
+/// A soft outer glow around a rounded rectangle, from stacked strokes.
+pub fn glow(painter: &Painter, rect: Rect, radius: f32, color: Color32, spread: f32) {
+    const STEPS: u8 = 6;
+    for step in 0..STEPS {
+        let t = f32::from(step) / f32::from(STEPS);
+        let grow = spread * (1.0 - t);
+        painter.rect_stroke(
+            rect.expand(grow),
+            CornerRadius::from(radius + grow),
+            Stroke::new(2.0, color.gamma_multiply(0.10 * t * t + 0.02)),
+            StrokeKind::Outside,
+        );
+    }
+}
+
+/// A four-pointed sparkle (the "thinking" glyph) with curved flanks.
+pub fn sparkle(painter: &Painter, center: Pos2, radius: f32, color: Color32) {
+    const STEPS: usize = 12;
+    let tips = [vec2(0.0, -radius), vec2(radius, 0.0), vec2(0.0, radius), vec2(-radius, 0.0)];
+    let pull = radius * 0.12;
+    let mut points = Vec::with_capacity(4 * STEPS);
+    for quarter in 0..4 {
+        let (from, to) = (tips[quarter], tips[(quarter + 1) % 4]);
+        let control = (from + to).normalized() * pull;
+        for step in 0..STEPS {
+            let t = step as f32 / STEPS as f32;
+            points.push(center + from * (1.0 - t) * (1.0 - t) + control * 2.0 * t * (1.0 - t) + to * t * t);
+        }
+    }
+    fill_polygon(painter, &points, color);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fills_fade_out_over_one_physical_pixel_at_their_edge() {
+        let rect = Rect::from_min_size(pos2(10.0, 20.0), vec2(48.0, 48.0));
+        let pixels_per_point = 1.25;
+        let mesh = gradient_mesh(rect, Color32::WHITE, Color32::BLACK, 14.0, pixels_per_point);
+        let ring = &mesh.vertices[1..];
+        assert!(ring.len() / 2 > 4 * 6, "corners need enough segments to look round");
+        for pair in ring.chunks(2) {
+            let (inner, outer) = (&pair[0], &pair[1]);
+            assert_eq!(inner.color.a(), 255);
+            assert_eq!(outer.color, Color32::TRANSPARENT);
+            let width = (outer.pos - inner.pos).length();
+            assert!(width >= 1.0 / pixels_per_point - 1e-3 && width < 3.0 / pixels_per_point, "{width}");
+            assert!(rect.expand(1.0 / pixels_per_point).contains(outer.pos));
+        }
+        assert_eq!(mesh.indices.len(), ring.len() / 2 * 9);
+    }
+
+    #[test]
+    fn gradients_run_top_to_bottom() {
+        let rect = Rect::from_min_size(pos2(0.0, 0.0), vec2(10.0, 100.0));
+        let mesh = gradient_mesh(rect, Color32::WHITE, Color32::BLACK, 0.0, 1.0);
+        let top = mesh.vertices.iter().find(|v| v.pos.y < 1.0 && v.color.a() == 255).expect("a top vertex");
+        let bottom = mesh.vertices.iter().find(|v| v.pos.y > 99.0 && v.color.a() == 255).expect("a bottom vertex");
+        assert!(top.color.r() > 250 && bottom.color.r() < 5);
+    }
+
+    #[test]
+    fn degenerate_polygons_paint_nothing() {
+        assert!(polygon_mesh(&[pos2(0.0, 0.0), pos2(1.0, 1.0)], 1.0, |_| Color32::WHITE).is_empty());
+    }
+}

@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Rover logo: a lavender six-wheel-style rover with an amber camera eye, antenna beacon and glowing hubs.
+       Light comes from the upper left; faces darken toward the lower right. -->
+  <defs>
+    <linearGradient id="deck" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6F0FB"/>
+      <stop offset="0.55" stop-color="#E2D6EF"/>
+      <stop offset="1" stop-color="#C8B6E0"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C9B8E0"/>
+      <stop offset="0.6" stop-color="#A893CB"/>
+      <stop offset="1" stop-color="#8D77B7"/>
+    </linearGradient>
+    <linearGradient id="under" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5A4787"/>
+      <stop offset="1" stop-color="#3A2B5E"/>
+    </linearGradient>
+    <linearGradient id="strut" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#BBA8D8"/>
+      <stop offset="0.5" stop-color="#9580C0"/>
+      <stop offset="1" stop-color="#6E5A9A"/>
+    </linearGradient>
+    <linearGradient id="tread" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#CDBDE4"/>
+      <stop offset="0.38" stop-color="#A792CC"/>
+      <stop offset="0.62" stop-color="#8670B2"/>
+      <stop offset="1" stop-color="#5D4A8B"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A28DC8"/>
+      <stop offset="1" stop-color="#6A5696"/>
+    </linearGradient>
+    <radialGradient id="hub" cx="0.62" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#2E2148"/>
+      <stop offset="0.7" stop-color="#3D2D5F"/>
+      <stop offset="1" stop-color="#4E3C74"/>
+    </radialGradient>
+    <linearGradient id="mast" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#EFE6F8"/>
+      <stop offset="0.55" stop-color="#C9B8E2"/>
+      <stop offset="1" stop-color="#9F8AC7"/>
+    </linearGradient>
+    <linearGradient id="neck" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#A994CD"/>
+      <stop offset="1" stop-color="#6F5B9C"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F7F2FC"/>
+      <stop offset="0.45" stop-color="#DDD0EE"/>
+      <stop offset="0.75" stop-color="#B5A2D5"/>
+      <stop offset="1" stop-color="#8F7AB9"/>
+    </linearGradient>
+    <radialGradient id="amber" cx="0.42" cy="0.62" r="0.62">
+      <stop offset="0" stop-color="#FFF1B8"/>
+      <stop offset="0.35" stop-color="#FFC94A"/>
+      <stop offset="0.8" stop-color="#F59B16"/>
+      <stop offset="1" stop-color="#D9730C"/>
+    </radialGradient>
+    <radialGradient id="beacon" cx="0.36" cy="0.32" r="0.72">
+      <stop offset="0" stop-color="#FFEFAE"/>
+      <stop offset="0.45" stop-color="#FFC233"/>
+      <stop offset="1" stop-color="#EE8B10"/>
+    </radialGradient>
+    <linearGradient id="strip" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE98C"/>
+      <stop offset="1" stop-color="#FFB627"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-80%" width="200%" height="260%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+
+    <!-- one wheel, face (hub) on the left, tread running right; scaled per wheel -->
+    <g id="wheel">
+      <path d="M0 -130 L118 -130 A62 130 0 0 1 118 130 L0 130 Z" fill="url(#tread)"/>
+      <path d="M8 -86 L150 -86 M8 -40 L170 -40 M8 40 L170 40 M8 86 L150 86" stroke="#6C5899" stroke-opacity="0.35" stroke-width="7"/>
+      <path d="M0 -130 L118 -130 A62 130 0 0 1 176 -40" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="4"/>
+      <ellipse cx="0" cy="0" rx="64" ry="130" fill="url(#face)"/>
+      <ellipse cx="6" cy="2" rx="44" ry="94" fill="url(#hub)"/>
+      <ellipse cx="2" cy="2" rx="33" ry="72" fill="none" stroke="#FF9F1C" stroke-width="13" filter="url(#soft)" opacity="0.8"/>
+      <ellipse cx="2" cy="2" rx="33" ry="72" fill="none" stroke="#FFB52E" stroke-width="9"/>
+      <ellipse cx="14" cy="2" rx="28" ry="66" fill="#33264F"/>
+      <ellipse cx="-34" cy="-40" rx="10" ry="40" fill="#FFFFFF" opacity="0.18"/>
+    </g>
+  </defs>
+
+  <g transform="translate(18 -38)">
+    <!-- far right wheel and its strut sit behind the body -->
+    <path d="M716 600 C 744 640 772 668 800 712" fill="none" stroke="url(#strut)" stroke-width="54" stroke-linecap="round"/>
+    <use href="#wheel" transform="translate(776 744) scale(0.98)"/>
+    <path d="M722 610 C 748 646 772 670 796 706" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="8" stroke-linecap="round"/>
+
+    <!-- undercarriage -->
+    <path d="M226 578 L792 572 L756 646 L282 652 Z" fill="url(#under)"/>
+    <!-- left strut -->
+    <path d="M198 604 Q 214 588 252 590 L 300 596 L 300 650 L 214 652 Q 186 650 190 626 Z" fill="url(#strut)"/>
+
+    <use href="#wheel" transform="translate(108 752) scale(1.0)"/>
+    <use href="#wheel" transform="translate(404 756) scale(1.12)"/>
+
+    <!-- body: deck (top) and front face -->
+    <path d="M214 440 L758 452 C 786 453 804 462 812 480 L 822 504 C 826 514 818 520 806 520 L 206 506 C 186 505 174 494 178 478 L 186 458 C 190 446 200 440 214 440 Z" fill="url(#deck)"/>
+    <path d="M178 478 C 174 494 186 505 206 506 L 806 520 C 818 520 826 514 822 504 L 830 540 C 834 562 822 578 798 579 L 238 584 C 208 584 188 568 184 546 Z" fill="url(#front)"/>
+    <path d="M206 506 L 806 520" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="5" stroke-linecap="round"/>
+    <path d="M214 440 L758 452" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- vents -->
+    <g stroke="#5A4687" stroke-width="15" stroke-linecap="round">
+      <path d="M246 566 L 266 532"/>
+      <path d="M286 566 L 306 532"/>
+      <path d="M326 566 L 346 532"/>
+    </g>
+
+    <!-- amber light strip -->
+    <rect x="652" y="534" width="128" height="30" rx="15" fill="#FFB020" filter="url(#glow)" opacity="0.75"/>
+    <rect x="652" y="534" width="128" height="30" rx="15" fill="url(#strip)"/>
+    <rect x="664" y="538" width="88" height="8" rx="4" fill="#FFFFFF" opacity="0.55"/>
+
+    <!-- antenna -->
+    <ellipse cx="404" cy="452" rx="50" ry="13" fill="#9984C2"/>
+    <path d="M356 436 L452 436 L452 452 A48 12 0 0 1 356 452 Z" fill="#B7A4D6"/>
+    <ellipse cx="404" cy="436" rx="48" ry="12" fill="#EEE5F7"/>
+    <rect x="392" y="282" width="24" height="158" rx="12" fill="url(#mast)"/>
+    <circle cx="404" cy="262" r="46" fill="#FFB52E" filter="url(#glow)" opacity="0.55"/>
+    <circle cx="404" cy="262" r="36" fill="url(#beacon)"/>
+    <ellipse cx="392" cy="248" rx="13" ry="9" fill="#FFFFFF" opacity="0.7"/>
+
+    <!-- camera neck and joint -->
+    <path d="M598 448 L 648 380" stroke="url(#neck)" stroke-width="46" stroke-linecap="round"/>
+    <path d="M590 440 L 636 378" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="670" cy="452" r="27" fill="#8E79B8"/>
+    <circle cx="664" cy="445" r="20" fill="#B9A6D8"/>
+    <ellipse cx="658" cy="438" rx="8" ry="5" fill="#FFFFFF" opacity="0.5"/>
+
+    <!-- camera head -->
+    <path d="M590 200 L786 194 A86 98 0 0 1 788 386 L592 390 C 520 392 488 344 488 296 C 488 246 522 202 590 200 Z" fill="url(#head)"/>
+    <path d="M520 248 C 548 212 600 206 660 206" fill="none" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="7" stroke-linecap="round"/>
+    <path d="M498 330 C 520 372 560 384 640 384" fill="none" stroke="#6D5898" stroke-opacity="0.35" stroke-width="10" stroke-linecap="round"/>
+    <!-- lens -->
+    <ellipse cx="788" cy="290" rx="86" ry="98" fill="#F2EBF8"/>
+    <ellipse cx="792" cy="292" rx="73" ry="84" fill="#4A2F3E"/>
+    <ellipse cx="796" cy="294" rx="70" ry="80" fill="#FF9F1C" filter="url(#glow)" opacity="0.6"/>
+    <ellipse cx="796" cy="294" rx="60" ry="70" fill="url(#amber)"/>
+    <ellipse cx="796" cy="294" rx="60" ry="70" fill="none" stroke="#B8580A" stroke-opacity="0.55" stroke-width="5"/>
+    <circle cx="812" cy="262" r="14" fill="#FFFFFF" opacity="0.92"/>
+  </g>
+</svg>

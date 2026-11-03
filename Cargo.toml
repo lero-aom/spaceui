@@ -1,0 +1,42 @@
+[package]
+name = "spaceui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "A design system for egui desktop apps: themes, anti-aliased painting, vector icons, widgets, a custom-window shell and a chat kit"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["egui", "gui", "design-system", "theme", "widgets"]
+categories = ["gui"]
+# Screenshots and CI stay in the repository; the package carries the code, icons and gallery.
+exclude = ["/docs", "/.github", "/target"]
+
+[dependencies]
+egui = "0.37"
+# Logos and icons stay SVG and are rasterized at the display's pixel density.
+resvg = { version = "0.45", default-features = false }
+# Native window chrome (rounded corners on Windows 11).
+raw-window-handle = "0.6"
+
+[dev-dependencies]
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "wayland", "x11"] }
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[lints.rust]
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unsafe_code = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Pixel maths converts between f32, u32 and usize on purpose.
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+# `spaceui::theme::Theme` reads better than renamed types.
+module_name_repetitions = "allow"

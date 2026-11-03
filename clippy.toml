@@ -1,0 +1,3 @@
+doc-valid-idents = ["SpaceUI", ".."]
+# Window edges are named l, r, t, b like the rectangle they bound.
+single-char-binding-names-threshold = 8
