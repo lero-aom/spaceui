@@ -9,7 +9,7 @@ Twelve icons in `assets/icons/` are based on [Feather](https://github.com/feathe
   of the same names at a different scale.
 - `book` and `chat` follow Feather's `book-open` and `message-square`.
 
-The rest were drawn for this project; , ,  and  use layouts most icon sets share.
+The rest were drawn for this project; `file`, `page`, `history` and `alert` use layouts most icon sets share.
 
 ```
 The MIT License (MIT)
