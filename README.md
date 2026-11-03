@@ -1,5 +1,6 @@
 # SpaceUI
 
+[![CI](https://github.com/lero-aom/spaceui/actions/workflows/ci.yml/badge.svg)](https://github.com/lero-aom/spaceui/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/spaceui.svg)](https://crates.io/crates/spaceui)
 [![Documentation](https://docs.rs/spaceui/badge.svg)](https://docs.rs/spaceui)
 [![MSRV](https://img.shields.io/badge/MSRV-1.95-blue.svg)](#minimum-supported-rust-version)

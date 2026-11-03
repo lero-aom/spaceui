@@ -29,3 +29,6 @@ First release, extracted from Rover and Probe.
 - `window`: an undecorated viewport, rounded corners on Windows 11 and
   screenshot runs.
 - Examples `minimal`, `custom_theme` and `gallery`.
+
+[Unreleased]: https://github.com/lero-aom/spaceui/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/lero-aom/spaceui/releases/tag/v0.1.0

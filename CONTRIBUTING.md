@@ -48,5 +48,6 @@ If an icon comes from a third-party set, record its license in `NOTICE.md`.
 ## Releasing
 
 1. Update `CHANGELOG.md` and the version in `Cargo.toml`.
-2. Make sure `repository` is set in `Cargo.toml`, so crates.io links the README's screenshots.
-3. `cargo package` and inspect the file list, then `cargo publish`.
+2. `cargo package` and inspect the file list.
+3. Tag the release (`git tag v0.1.0 && git push --tags`), then `cargo publish`. crates.io shows the README's
+   screenshots from this repository, so it must be public by then.
