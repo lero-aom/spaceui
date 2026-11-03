@@ -1,0 +1,2 @@
+**bold** _italic_ `code` [世界](https://example.org/wiki) https://example.org/a_(b).
+\*escaped\* [unfinished **streaming `tail

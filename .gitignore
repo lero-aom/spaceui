@@ -1,1 +1,7 @@
 /target
+/tests/snapshots/**/*.new.png
+/tests/snapshots/**/*.diff.png
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts
+/fuzz/coverage

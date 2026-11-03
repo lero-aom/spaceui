@@ -9,68 +9,34 @@
 //!   every widget reads it back with [`Theme::of`]. Nothing hard-codes a colour.
 //! - **Smooth at any scale.** Gradients and fills get a one-pixel feathered
 //!   edge like egui's own shapes ([`paint`]); icons and logos are SVG,
-//!   rasterized at the exact pixel size they're drawn at ([`art`]).
-//! - **Shell, not framework.** [`Shell`] paints the window (a title bar, an
-//!   optional rail, columns on either side) and returns the [`Regions`] to
+//!   rasterized at the exact pixel size they're drawn at (`art`).
+//! - **Shell, not framework.** `Shell` paints the window (a title bar, an
+//!   optional rail, columns on either side) and returns the `Regions` to
 //!   fill; your app keeps its own state, pages and backends.
 //!
 //! # Quick start
 //!
-//! ```no_run
-//! use spaceui::egui;
-//! use spaceui::prelude::*;
-//!
-//! const RAIL: &[RailItem] = &[
-//!     RailItem::page(Icon::Home, "Home"),
-//!     RailItem::page(Icon::Chart, "Markets"),
-//!     RailItem::Divider,
-//!     RailItem::page(Icon::Settings, "Settings"),
-//! ];
-//!
-//! #[derive(Default)]
-//! struct App {
-//!     page: usize,
-//!     side: f32,
-//! }
-//!
-//! impl eframe::App for App {
-//!     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-//!         let regions = Shell::new("My App")
-//!             .logo(Icon::Orbit.svg())
-//!             .rail(RAIL)
-//!             .right_column(&mut self.side, 320.0..=560.0)
-//!             .show(ui, &mut self.page);
-//!
-//!         ui.scope_builder(egui::UiBuilder::new().max_rect(regions.main), |ui| {
-//!             ui.heading(["Home", "Markets", "Settings"][self.page]);
-//!             if widgets::primary(ui, "Connect").clicked() {
-//!                 // ...
-//!             }
-//!         });
+//! ```
+//! use spaceui::{Theme, egui, widgets};
+//! let ctx = egui::Context::default();
+//! Theme::carbon_copper().install(&ctx);
+//! ctx.run_ui(Default::default(), |ui| {
+//!     if widgets::primary(ui, "Connect").clicked() {
+//!         // Start the application's action.
 //!     }
-//! }
-//!
-//! fn main() -> eframe::Result {
-//!     let options = eframe::NativeOptions {
-//!         // Undecorated: the shell draws the title bar and the resize edges.
-//!         viewport: window::viewport("My App", "my-app"),
-//!         ..Default::default()
-//!     };
-//!     eframe::run_native(
-//!         "My App",
-//!         options,
-//!         Box::new(|cc| {
-//!             let theme = Theme::carbon_copper();
-//!             window::round_corners(cc, theme.palette.border);
-//!             theme.install(&cc.egui_ctx);
-//!             Ok(Box::new(App::default()))
-//!         }),
-//!     )
-//! }
+//! }).drop_without_applying_deltas();
 //! ```
 //!
-//! The repository's `examples/` directory has this app (`minimal`), a custom
-//! theme (`custom_theme`) and a gallery of every part in both themes (`gallery`).
+//! The repository's `minimal`, `custom_theme` and `gallery` examples show
+//! complete eframe applications, a custom palette, and every component.
+//!
+//! # Features
+//!
+//! Defaults include `svg`, `shell`, `chat`, `native`, and `screenshot`.
+//! Disable defaults for themes, painting, and basic widgets alone. `shell`
+//! and `chat` enable `svg`; `screenshot` enables the SVG/PNG dependency.
+//! `native` enables native window handles. Accessibility metadata is always
+//! available through egui. Optional modules are absent when disabled.
 //!
 //! # Organisation
 //!
@@ -80,10 +46,10 @@
 //! |---|---|
 //! | [`theme`] | [`Theme`], [`Palette`], [`Metrics`], [`Fonts`] and [`Backdrop`] |
 //! | [`paint`] | Anti-aliased gradients, polygon fills and glows |
-//! | [`art`] | The built-in [`Icon`] set and app [`Svg`]s such as logos |
+//! | `art` | The built-in `Icon` set and app `Svg`s such as logos |
 //! | [`widgets`] | Buttons, pills, tabs, cards, switches, fields and sliders |
-//! | [`shell`] | The window: title bar, optional icon rail, cards and columns on either side |
-//! | [`chat`] | A chat column: tabs, transcript, composer and Markdown |
+//! | `shell` | The window: title bar, optional icon rail, cards and columns on either side |
+//! | `chat` | A chat column: tabs, transcript, composer and Markdown |
 //! | [`window`] | Native window setup and screenshot runs |
 //!
 //! [`prelude`] imports the names most apps use.
@@ -97,9 +63,11 @@
 //!
 //! # Platform support
 //!
-//! SpaceUI runs wherever egui does. On Windows it uses the system's Segoe UI
-//! fonts and asks Windows 11 for rounded window corners; elsewhere egui's
-//! bundled fonts stand in and windows keep their system corners.
+//! CI targets Windows, Linux and macOS desktop builds. Headless tests do not
+//! certify native window-manager behavior. Other egui targets, including the
+//! web, are not currently part of SpaceUI's support promise. On Windows the
+//! default fonts come from Segoe UI; other systems use bundled fallback fonts.
+//! The `native` feature provides optional Windows 11 rounded corners.
 //!
 //! # Minimum supported Rust version
 //!
@@ -107,9 +75,12 @@
 //!
 //! [egui]: https://github.com/emilk/egui
 
+#[cfg(feature = "svg")]
 pub mod art;
+#[cfg(feature = "chat")]
 pub mod chat;
 pub mod paint;
+#[cfg(feature = "shell")]
 pub mod shell;
 mod text;
 pub mod theme;
@@ -117,30 +88,37 @@ pub mod widgets;
 pub mod window;
 
 #[doc(no_inline)]
+#[cfg(feature = "svg")]
 pub use art::{Icon, Svg};
 /// The egui version SpaceUI is built on, so apps can depend on one egui.
 pub use egui;
 #[doc(no_inline)]
-pub use shell::{RailItem, Regions, Shell};
+#[cfg(feature = "shell")]
+pub use shell::{RailItem, Regions, Shell, WindowLabels};
 #[doc(no_inline)]
 pub use theme::{Backdrop, Fonts, Metrics, Palette, Theme};
 
 /// The names most apps need: `use spaceui::prelude::*;`.
 pub mod prelude {
     #[doc(no_inline)]
+    #[cfg(feature = "svg")]
     pub use crate::art::{Icon, Svg};
     #[doc(no_inline)]
-    pub use crate::shell::{RailItem, Regions, Shell};
+    #[cfg(feature = "chat")]
+    pub use crate::chat;
+    #[doc(no_inline)]
+    #[cfg(feature = "shell")]
+    pub use crate::shell::{RailItem, Regions, Shell, WindowLabels};
     #[doc(no_inline)]
     pub use crate::theme::{Backdrop, FontFile, Fonts, Metrics, Palette, Theme, mono, regular, semibold};
     #[doc(no_inline)]
     pub use crate::widgets::Tone;
     #[doc(no_inline)]
-    pub use crate::{chat, paint, widgets, window};
+    pub use crate::{paint, widgets, window};
 }
 
 // The README's examples compile and run as doc tests.
-#[cfg(doctest)]
+#[cfg(all(doctest, feature = "shell", feature = "native", feature = "chat"))]
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 

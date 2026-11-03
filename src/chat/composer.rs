@@ -1,7 +1,8 @@
+use super::ChatLabels;
 use crate::{Icon, Theme, paint, theme::Palette};
 use egui::{
     Align, Color32, CursorIcon, FontId, Frame, Id, Key, KeyboardShortcut, Layout, Modifiers, Rect, Response, RichText,
-    ScrollArea, Sense, Spinner, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2, pos2, vec2,
+    Role, ScrollArea, Sense, Spinner, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2, WidgetInfo, pos2, vec2,
 };
 
 const FONT_SIZE: f32 = 14.0;
@@ -26,6 +27,7 @@ pub struct Composer<'a> {
     busy: bool,
     stoppable: bool,
     focus: bool,
+    labels: ChatLabels<'a>,
 }
 
 /// What the owner did in the composer this frame.
@@ -49,12 +51,20 @@ impl<'a> Composer<'a> {
             busy: false,
             stoppable: true,
             focus: false,
+            labels: ChatLabels::default(),
         }
     }
 
     /// Placeholder text shown while the draft is empty.
     pub fn hint(mut self, hint: &'a str) -> Self {
         self.hint = hint;
+        self
+    }
+
+    /// Accessible button names and help text, for localization. Translate the
+    /// draft placeholder separately with [`Self::hint`].
+    pub fn labels(mut self, labels: ChatLabels<'a>) -> Self {
+        self.labels = labels;
         self
     }
 
@@ -86,21 +96,26 @@ impl<'a> Composer<'a> {
     /// Draws into `rect` (from [`ChatLayout`](super::ChatLayout)); `accessories`
     /// fill the left of the bottom row, laid out left to right.
     pub fn show(self, ui: &mut Ui, rect: Rect, accessories: impl FnOnce(&mut Ui)) -> ComposerResponse {
+        if rect.width() < 28.0 || rect.height() < 34.0 {
+            return ComposerResponse::default();
+        }
         let p = Theme::of(ui.ctx()).palette;
-        let input_id = self.id.with("input");
+        let id = ui.make_persistent_id(self.id);
+        let input_id = id.with("input");
         let focused = ui.memory(|m| m.has_focus(input_id));
         let border = if focused { p.accent.gamma_multiply(0.7) } else { p.border };
         ui.painter().rect(rect, 16.0, p.well, Stroke::new(1.0, border), StrokeKind::Inside);
         // A click anywhere on the composer focuses the draft; its buttons win.
-        let mut focus = self.focus || ui.interact(rect, self.id.with("plate"), Sense::click()).clicked();
+        let mut focus = self.focus || ui.interact(rect, id.with("plate"), Sense::click()).clicked();
 
-        let text_height = text_height(ui, rect.width(), self.draft, self.hint);
-        let text_rect = Rect::from_min_size(rect.min + vec2(14.0, 12.0), vec2(rect.width() - 28.0, text_height + 2.0));
+        let text_height = text_height(ui, rect.width(), self.draft, self.hint).min((rect.height() - 64.0).max(0.0));
+        let text_rect = Rect::from_min_size(rect.min + vec2(14.0, 12.0), vec2(rect.width() - 28.0, text_height));
         // An empty draft shows the whole hint, which may wrap.
         let rows = if self.draft.is_empty() { (text_height / LINE_HEIGHT).round().max(1.0) as usize } else { 1 };
-        let mut child = ui.new_child(UiBuilder::new().max_rect(text_rect).id_salt(self.id.with("text")));
+        let mut child = ui.new_child(UiBuilder::new().max_rect(text_rect).id_salt(id.with("text")));
+        child.set_clip_rect(text_rect.intersect(ui.clip_rect()));
         let edit = ScrollArea::vertical()
-            .id_salt(self.id.with("scroll"))
+            .id_salt(id.with("scroll"))
             .max_height(text_rect.height())
             .show(&mut child, |ui| {
                 ui.add(
@@ -116,40 +131,57 @@ impl<'a> Composer<'a> {
                 )
             })
             .inner;
-        let enter =
-            (edit.has_focus() || edit.lost_focus()) && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+        let enter = ui.is_enabled()
+            && (edit.has_focus() || edit.lost_focus())
+            && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
         let has_text = !self.draft.trim().is_empty();
 
         let row = Rect::from_min_max(
-            pos2(rect.left() + 10.0, rect.bottom() - 40.0),
-            pos2(rect.right() - 8.0, rect.bottom() - 6.0),
+            pos2(rect.left() + 10.0_f32.min(rect.width() / 4.0), (rect.bottom() - 40.0).max(rect.top())),
+            pos2(rect.right() - 8.0_f32.min(rect.width() / 4.0), rect.bottom() - 6.0_f32.min(rect.height() / 4.0)),
         );
         let mut out = ComposerResponse::default();
-        ui.scope_builder(UiBuilder::new().max_rect(row).layout(Layout::left_to_right(Align::Center)), |ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            accessories(ui);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if self.busy && !self.stoppable {
-                    let (spot, _) = ui.allocate_exact_size(Vec2::splat(32.0), Sense::hover());
+        let accessories_rect = Rect::from_min_max(row.min, pos2((row.right() - 38.0).max(row.left()), row.bottom()));
+        ui.scope_builder(
+            UiBuilder::new()
+                .max_rect(accessories_rect)
+                .id_salt(id.with("accessories"))
+                .layout(Layout::left_to_right(Align::Center)),
+            |ui| {
+                ui.set_clip_rect(accessories_rect.intersect(ui.clip_rect()));
+                ui.spacing_mut().item_spacing.x = 4.0;
+                accessories(ui);
+            },
+        );
+        let button_rect = Rect::from_center_size(pos2(row.right() - 16.0, row.center().y), Vec2::splat(32.0));
+        ui.scope_builder(UiBuilder::new().max_rect(button_rect).id_salt(id.with("button")), |ui| {
+            ui.set_clip_rect(rect.intersect(ui.clip_rect()));
+            if self.busy && !self.stoppable {
+                let (spot, response) = ui.allocate_exact_size(Vec2::splat(32.0), Sense::hover());
+                response.widget_info(|| WidgetInfo::labeled(Role::Label, ui.is_enabled(), self.labels.busy));
+                if ui.style().animation_time > 0.0 {
                     let spinner = Spinner::new().size(18.0).color(p.accent_hi);
                     ui.put(Rect::from_center_size(spot.center(), Vec2::splat(18.0)), spinner);
-                    return;
+                } else {
+                    Icon::Hourglass.paint(ui.painter(), spot.shrink(7.0), p.accent_hi);
                 }
-                let response = send_button(ui, &p, self.busy, has_text);
-                if response.clicked() {
-                    if self.busy {
-                        out.stop = true;
-                    } else if has_text {
-                        out.send = true;
-                    }
+                return;
+            }
+            let response =
+                ui.add_enabled_ui(self.busy || has_text, |ui| send_button(ui, &p, self.busy, &self.labels)).inner;
+            if response.clicked() {
+                if self.busy {
+                    out.stop = true;
+                } else if has_text {
+                    out.send = true;
                 }
-            });
+            }
         });
         if enter && has_text && !self.busy {
             out.send = true;
         }
         focus |= out.send;
-        if focus {
+        if focus && ui.is_enabled() {
             edit.request_focus();
         }
         out
@@ -157,12 +189,15 @@ impl<'a> Composer<'a> {
 }
 
 /// The round send (or stop) button: an accent gradient when it can act.
-fn send_button(ui: &mut Ui, p: &Palette, busy: bool, has_text: bool) -> Response {
+fn send_button(ui: &mut Ui, p: &Palette, busy: bool, labels: &ChatLabels<'_>) -> Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(32.0), Sense::click());
+    response.widget_info(|| {
+        WidgetInfo::labeled(Role::Button, ui.is_enabled(), if busy { labels.stop } else { labels.send })
+    });
     let painter = ui.painter();
-    let live = busy || has_text;
+    let live = ui.is_enabled();
     if live {
-        if response.hovered() {
+        if response.hovered() || response.has_focus() {
             paint::glow(painter, rect, 16.0, p.accent, 6.0);
             ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
         }
@@ -174,15 +209,17 @@ fn send_button(ui: &mut Ui, p: &Palette, busy: bool, has_text: bool) -> Response
     let (icon, size) = if busy { (Icon::Stop, 14.0) } else { (Icon::Send, 18.0) };
     let ink = if live { p.on_accent } else { p.muted };
     icon.paint(painter, Rect::from_center_size(rect.center(), Vec2::splat(size)), ink);
-    response.on_hover_text(if busy { "Stop" } else { "Send (Enter) · Shift+Enter for a new line" })
+    response.on_hover_text(if busy { labels.stop } else { labels.send_help })
 }
 
 fn text_height(ui: &Ui, width: f32, draft: &str, hint: &str) -> f32 {
     let measured = if draft.is_empty() { hint } else { draft };
-    ui.fonts_mut(|f| f.layout(measured.to_owned(), FontId::proportional(FONT_SIZE), Color32::WHITE, width - 28.0))
-        .size()
-        .y
-        .clamp(LINE_HEIGHT, LINE_HEIGHT * MAX_LINES + 4.0)
+    ui.fonts_mut(|f| {
+        f.layout(measured.to_owned(), FontId::proportional(FONT_SIZE), Color32::WHITE, (width - 28.0).max(1.0))
+    })
+    .size()
+    .y
+    .clamp(LINE_HEIGHT, LINE_HEIGHT * MAX_LINES + 4.0)
 }
 
 #[cfg(test)]

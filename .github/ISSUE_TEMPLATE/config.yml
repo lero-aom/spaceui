@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security reporting policy
+    url: https://github.com/lero-aom/spaceui/blob/HEAD/SECURITY.md
+    about: Read the private-reporting instructions before disclosing a vulnerability.

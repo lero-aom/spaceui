@@ -18,9 +18,10 @@
 use egui::{Color32, CornerRadius, Mesh, Painter, Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 /// Linear blend of two (premultiplied) colours; `t` is clamped to `0..=1`.
+/// NaN selects the first colour.
 #[must_use]
 pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
-    let t = t.clamp(0.0, 1.0);
+    let t = if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) };
     let lerp = |from: u8, to: u8| (f32::from(from) + (f32::from(to) - f32::from(from)) * t).round() as u8;
     Color32::from_rgba_premultiplied(lerp(a.r(), b.r()), lerp(a.g(), b.g()), lerp(a.b(), b.b()), lerp(a.a(), b.a()))
 }
@@ -30,6 +31,14 @@ pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
 /// a chord strays at most about 0.1 px from the true arc.
 #[must_use]
 pub fn rounded_rect_points(rect: Rect, radius: f32, pixels_per_point: f32) -> Vec<Pos2> {
+    if !rect.is_finite()
+        || !rect.is_positive()
+        || !radius.is_finite()
+        || !pixels_per_point.is_finite()
+        || pixels_per_point <= 0.0
+    {
+        return Vec::new();
+    }
     let radius = radius.min(rect.width() / 2.0).min(rect.height() / 2.0).max(0.0);
     let corners = [
         (pos2(rect.left() + radius, rect.top() + radius), 180.0_f32),
@@ -57,20 +66,40 @@ pub fn rounded_rect_points(rect: Rect, radius: f32, pixels_per_point: f32) -> Ve
 /// A filled polygon (convex, or visible from its centroid) with an
 /// anti-aliased edge `feather` points wide (use `1.0 / pixels_per_point`).
 /// `color_at` colours each vertex; colours linear in position give exact
-/// gradients.
+/// gradients. Invalid/degenerate geometry or a negative/non-finite feather
+/// produces an empty mesh. Repeated adjacent vertices are ignored.
 #[must_use]
 pub fn polygon_mesh(points: &[Pos2], feather: f32, color_at: impl Fn(Pos2) -> Color32) -> Mesh {
     let mut mesh = Mesh::default();
     let n = points.len();
-    if n < 3 {
+    if n < 3
+        || n > (u32::MAX as usize - 1) / 2
+        || !feather.is_finite()
+        || feather < 0.0
+        || points.iter().any(|p| !p.is_finite())
+    {
         return mesh;
     }
+    if (0..n).any(|i| (points[i] - points[(i + 1) % n]).length_sq() < 1e-12) {
+        let mut clean = points.to_vec();
+        clean.dedup_by(|a, b| (*a - *b).length_sq() < 1e-12);
+        while clean.len() > 1 && (clean[0] - clean[clean.len() - 1]).length_sq() < 1e-12 {
+            clean.pop();
+        }
+        return polygon_mesh(&clean, feather, color_at);
+    }
     let area: f32 = (0..n).map(|i| points[i].x * points[(i + 1) % n].y - points[(i + 1) % n].x * points[i].y).sum();
+    if !area.is_finite() || area.abs() < 1e-12 {
+        return mesh;
+    }
     let outward = |from: Pos2, to: Pos2| {
         let along = (to - from).normalized();
         if area > 0.0 { vec2(along.y, -along.x) } else { vec2(-along.y, along.x) }
     };
     let center = (points.iter().fold(Vec2::ZERO, |sum, p| sum + p.to_vec2()) / n as f32).to_pos2();
+    if !center.is_finite() {
+        return mesh;
+    }
     mesh.colored_vertex(center, color_at(center));
     for i in 0..n {
         let (prev, point, next) = (points[(i + n - 1) % n], points[i], points[(i + 1) % n]);
@@ -88,7 +117,7 @@ pub fn polygon_mesh(points: &[Pos2], feather: f32, color_at: impl Fn(Pos2) -> Co
         mesh.add_triangle(inner_i, outer_i, outer_j);
         mesh.add_triangle(inner_i, outer_j, inner_j);
     }
-    mesh
+    if mesh.vertices.iter().any(|vertex| !vertex.pos.is_finite()) { Mesh::default() } else { mesh }
 }
 
 /// Fills a polygon in one colour with an anti-aliased edge.
@@ -122,6 +151,9 @@ pub fn gradient_h(painter: &Painter, rect: Rect, left: Color32, right: Color32, 
 /// A soft disc fading from `color` at `alpha` in the centre to nothing.
 pub fn radial_glow(painter: &Painter, center: Pos2, radius: f32, color: Color32, alpha: u8) {
     const SEGMENTS: u32 = 48;
+    if !center.is_finite() || !radius.is_finite() || radius <= 0.0 {
+        return;
+    }
     let inner = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha);
     let mut mesh = Mesh::default();
     mesh.colored_vertex(center, inner);
@@ -201,5 +233,49 @@ mod tests {
     #[test]
     fn degenerate_polygons_paint_nothing() {
         assert!(polygon_mesh(&[pos2(0.0, 0.0), pos2(1.0, 1.0)], 1.0, |_| Color32::WHITE).is_empty());
+    }
+
+    #[test]
+    fn geometry_invariants_hold_across_sizes_radii_and_densities() {
+        for width in [0.0, 0.01, 1.0, 32.0, 800.0] {
+            for height in [0.0, 0.01, 7.0, 100.0] {
+                for radius in [-2.0, 0.0, 0.1, 8.0, 1000.0] {
+                    for dpi in [0.75, 1.0, 1.25, 2.0, 4.0] {
+                        let rect = Rect::from_min_size(pos2(0.0, 0.0), vec2(width, height));
+                        let mesh = gradient_mesh(rect, Color32::WHITE, Color32::BLACK, radius, dpi);
+                        assert!(mesh.vertices.iter().all(|vertex| vertex.pos.is_finite()));
+                        assert!(mesh.indices.iter().all(|index| (*index as usize) < mesh.vertices.len()));
+                        assert_eq!(mesh.indices.len() % 3, 0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_and_repeated_geometry_is_safe() {
+        let square = [pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0), pos2(0.0, 0.0)];
+        let mesh = polygon_mesh(&square, 1.0, |_| Color32::WHITE);
+        assert!(!mesh.is_empty());
+        assert!(mesh.vertices.iter().all(|v| v.pos.is_finite()));
+        for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0, -1.0] {
+            assert!(
+                gradient_mesh(
+                    Rect::from_min_size(Pos2::ZERO, Vec2::splat(10.0)),
+                    Color32::WHITE,
+                    Color32::BLACK,
+                    2.0,
+                    invalid
+                )
+                .is_empty()
+            );
+        }
+    }
+
+    #[test]
+    fn a_long_degenerate_closing_tail_is_cleaned_without_recursive_growth() {
+        let mut points = vec![Pos2::ZERO, pos2(0.0, 10.0)];
+        points.extend((0..10_000).map(|i| pos2(if i % 2 == 0 { 0.9e-6 } else { -0.9e-6 }, 0.0)));
+        assert!(polygon_mesh(&points, 1.0, |_| Color32::WHITE).is_empty());
     }
 }

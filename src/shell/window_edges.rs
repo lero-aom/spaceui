@@ -1,7 +1,7 @@
 //! Resize zones along the edges and corners of an undecorated window.
 use egui::{Area, Context, CursorIcon, Id, Order, Rect, Sense, ViewportCommand, pos2, viewport::ResizeDirection};
 
-pub(super) fn show(ctx: &Context) {
+pub(super) fn show(ctx: &Context, labels: &[&str; 8]) {
     // Edges are `EDGE` deep; corners are `CORNER` square.
     const EDGE: f32 = 5.0;
     const CORNER: f32 = 14.0;
@@ -23,10 +23,17 @@ pub(super) fn show(ctx: &Context) {
     ];
     // Small areas on the tooltip layer: above everything, yet covering only the edges.
     for (i, (zone, direction, cursor)) in zones.into_iter().enumerate() {
+        let zone = zone.intersect(window);
+        if !zone.is_positive() {
+            continue;
+        }
         Area::new(Id::unique(("spaceui-resize", i))).order(Order::Tooltip).fixed_pos(zone.min).constrain(false).show(
             ctx,
             |ui| {
-                let response = ui.allocate_rect(zone, Sense::drag());
+                // Native window-edge dragging is a pointer gesture. Do not
+                // add eight keyboard tab stops with no keyboard action.
+                let response = ui.allocate_rect(zone, Sense::DRAG);
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Splitter, true, labels[i]));
                 if response.hovered() || response.dragged() {
                     ui.ctx().set_cursor_icon(cursor);
                 }

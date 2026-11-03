@@ -1,29 +1,32 @@
 //! The pieces a transcript is made of.
 //!
-//! Call them in order inside a [`ScrollArea`](egui::ScrollArea); with
+//! Call them in order inside a [`ScrollArea`]; with
 //! `stick_to_bottom(true)` a streaming reply stays in view. A typical reply is
 //! a [`byline`], then [`thinking`], any tool [`Step`]s and the [`reply`] text.
 use super::markdown;
 use crate::{Icon, Svg, Theme, paint, text::truncated, theme::semibold};
 use egui::{
-    Align, Align2, Color32, CursorIcon, FontId, Frame, Id, Label, Margin, Rect, RichText, Sense, Stroke, StrokeKind,
-    Ui, Vec2, pos2, text::LayoutJob, vec2,
+    Align2, Color32, CursorIcon, FontId, Frame, Label, Margin, Rect, RichText, Role, ScrollArea, Sense, Stroke,
+    StrokeKind, Ui, UiBuilder, Vec2, WidgetInfo, pos2, vec2,
 };
 
 /// The owner's message, right-aligned in a bubble with inline Markdown;
 /// `hover` (a time, say) shows beside it on hover.
 pub fn user_bubble(ui: &mut Ui, text: &str, hover: &str) {
+    if ui.available_width() < 32.0 {
+        return;
+    }
     let p = Theme::of(ui.ctx()).palette;
     ui.add_space(10.0);
     let max_width = ui.available_width() * 0.84;
     let mut job = markdown::inline_job(text, &FontId::proportional(14.0), p.text, &p);
-    job.wrap.max_width = max_width - 28.0;
+    job.wrap.max_width = (max_width - 28.0).max(1.0);
     let galley = ui.fonts_mut(|f| f.layout_job(job));
     let size = galley.size() + vec2(28.0, 18.0);
     let (row, response) = ui.allocate_exact_size(vec2(ui.available_width(), size.y), Sense::hover());
     let bubble = Rect::from_min_size(pos2(row.right() - size.x, row.top()), size);
     ui.painter().rect(bubble, 16.0, p.bubble, Stroke::new(1.0, p.accent.gamma_multiply(0.25)), StrokeKind::Inside);
-    ui.painter().galley(bubble.min + vec2(14.0, 9.0), galley, p.text);
+    ui.put(bubble.shrink2(vec2(14.0, 9.0)), Label::new(galley).selectable(true));
     if response.hovered() && !hover.is_empty() {
         let at = pos2(bubble.left() - 8.0, bubble.center().y);
         ui.painter().text(at, Align2::RIGHT_CENTER, hover, FontId::proportional(11.5), p.muted);
@@ -52,9 +55,13 @@ pub fn reply(ui: &mut Ui, text: &str, streaming: bool) {
         if streaming {
             let time = ui.input(|i| i.time) as f32;
             let (rect, _) = ui.allocate_exact_size(vec2(10.0, 14.0), Sense::hover());
-            let ink = p.accent_hi.gamma_multiply(0.4 + 0.6 * (time * 4.0).sin().abs());
+            let animate = ui.style().animation_time > 0.0;
+            let alpha = if animate { 0.4 + 0.6 * (time * 4.0).sin().abs() } else { 1.0 };
+            let ink = p.accent_hi.gamma_multiply(alpha);
             ui.painter().rect_filled(rect.shrink2(vec2(2.0, 1.0)), 1.0, ink);
-            ui.ctx().request_repaint();
+            if animate {
+                ui.ctx().request_repaint();
+            }
         }
     });
     ui.add_space(4.0);
@@ -64,25 +71,48 @@ pub fn reply(ui: &mut Ui, text: &str, streaming: bool) {
 /// When there is reasoning `text`, a click toggles it; the app keeps `open`
 /// and flips it when this returns true.
 pub fn thinking(ui: &mut Ui, text: &str, active: bool, secs: f32, open: bool) -> bool {
+    let label = if active { "Thinking…".to_owned() } else { format!("Thought for {}s", secs.round().max(1.0)) };
+    thinking_with_label(ui, text, active, open, &label)
+}
+
+/// A reasoning disclosure with a caller-provided status label. This lets the
+/// application translate both the active state and its duration formatting.
+/// The returned flag asks the application to toggle `open`.
+pub fn thinking_with_label(ui: &mut Ui, text: &str, active: bool, open: bool, label: &str) -> bool {
     let p = Theme::of(ui.ctx()).palette;
     ui.add_space(2.0);
-    let (row, response) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::click());
+    let has_text = !text.trim().is_empty();
+    let (row, response) = ui.allocate_exact_size(
+        vec2(ui.available_width().max(0.0), 26.0),
+        if has_text { Sense::click() } else { Sense::hover() },
+    );
+    response.widget_info(|| {
+        WidgetInfo::selected(if has_text { Role::Button } else { Role::Label }, ui.is_enabled(), open, label)
+    });
+    if response.has_focus() {
+        ui.painter().rect_stroke(row, 4.0, Stroke::new(1.0, p.accent_hi), StrokeKind::Inside);
+    }
     let time = ui.input(|i| i.time) as f32;
+    let animate = ui.style().animation_time > 0.0;
     let star = pos2(row.left() + 14.0, row.center().y);
-    if active {
+    if active && animate {
         paint::radial_glow(ui.painter(), star, 16.0, p.accent, (70.0 * (0.55 + 0.45 * (time * 2.6).sin())) as u8);
         ui.ctx().request_repaint();
     }
-    paint::sparkle(ui.painter(), star, if active { 8.0 + 0.8 * (time * 2.6).sin() } else { 8.0 }, p.accent_hi);
-    let label = if active { "Thinking…".to_owned() } else { format!("Thought for {}s", secs.round().max(1.0)) };
+    paint::sparkle(
+        ui.painter(),
+        star,
+        if active && animate { 8.0 + 0.8 * (time * 2.6).sin() } else { 8.0 },
+        p.accent_hi,
+    );
     let label_rect = ui.painter().text(
         pos2(row.left() + 30.0, row.center().y),
         Align2::LEFT_CENTER,
-        &label,
+        label,
         FontId::proportional(13.5),
         if active { p.text } else { p.text_2 },
     );
-    if active {
+    if active && animate {
         // A soft shimmer sweeping across the label.
         let x = label_rect.left() + (time * 90.0) % (label_rect.width() + 60.0) - 30.0;
         let sweep = Rect::from_min_max(pos2(x - 18.0, label_rect.top()), pos2(x + 18.0, label_rect.bottom()));
@@ -91,7 +121,6 @@ pub fn thinking(ui: &mut Ui, text: &str, active: bool, secs: f32, open: bool) ->
             ui.painter().rect_filled(sweep, 0.0, Color32::from_white_alpha(16));
         }
     }
-    let has_text = !text.trim().is_empty();
     if has_text {
         let chevron = if open { Icon::ChevronDown } else { Icon::ChevronRight };
         let at = pos2(label_rect.right() + 12.0, row.center().y);
@@ -155,7 +184,10 @@ impl Step<'_> {
     pub fn show(&self, ui: &mut Ui, prev: bool, next: bool) {
         let p = Theme::of(ui.ctx()).palette;
         let height = if self.detail.is_empty() { 30.0 } else { 46.0 };
-        let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
+        let (row, response) = ui.allocate_exact_size(vec2(ui.available_width().max(0.0), height), Sense::hover());
+        response.widget_info(|| {
+            WidgetInfo::labeled(Role::Label, ui.is_enabled(), format!("{} {} {}", self.title, self.detail, self.time))
+        });
         let (line_x, dot_y) = (row.left() + 14.0, row.top() + 14.0);
         let line = Stroke::new(1.5, p.border);
         if prev {
@@ -182,9 +214,13 @@ impl Step<'_> {
         let right = pos2(row.right() - 12.0, dot_y);
         if self.status == StepStatus::Running {
             let time = ui.input(|i| i.time) as f32;
-            ui.painter().circle_filled(right, 8.0, p.accent.gamma_multiply(0.2 + 0.2 * (time * 4.0).sin().abs()));
+            let animate = ui.style().animation_time > 0.0;
+            let alpha = if animate { 0.2 + 0.2 * (time * 4.0).sin().abs() } else { 0.3 };
+            ui.painter().circle_filled(right, 8.0, p.accent.gamma_multiply(alpha));
             ui.painter().circle_filled(right, 4.0, p.accent_hi);
-            ui.ctx().request_repaint();
+            if animate {
+                ui.ctx().request_repaint();
+            }
         } else if !self.time.is_empty() {
             let at = right + vec2(6.0, 0.0);
             ui.painter().text(at, Align2::RIGHT_CENTER, self.time, FontId::proportional(11.5), p.muted);
@@ -223,44 +259,31 @@ pub fn empty_state(
     hint: &str,
     starters: &[&str],
 ) -> Option<usize> {
+    if !rect.is_positive() {
+        return None;
+    }
     let p = Theme::of(ui.ctx()).palette;
-    let block = 110.0 + starters.len() as f32 * 46.0;
-    let center = pos2(rect.center().x, rect.center().y - block / 2.0 + 30.0);
-    if let Some(logo) = logo {
-        let logo_rect = Rect::from_center_size(center - vec2(0.0, 40.0), Vec2::splat(78.0));
-        paint::radial_glow(ui.painter(), logo_rect.center(), 70.0, p.accent, 34);
-        logo.paint(ui.painter(), logo_rect, Color32::WHITE);
-    }
-    ui.painter().text(pos2(center.x, center.y + 18.0), Align2::CENTER_CENTER, headline, semibold(18.0), p.text);
-    let mut job = LayoutJob::simple(hint.to_owned(), FontId::proportional(12.5), p.muted, rect.width() - 56.0);
-    job.halign = Align::Center;
-    let hint = ui.fonts_mut(|f| f.layout_job(job));
-    let mut y = center.y + 48.0 + hint.size().y;
-    ui.painter().galley(pos2(center.x, center.y + 34.0), hint, p.muted);
+    let mut child = ui.new_child(UiBuilder::new().max_rect(rect));
+    child.set_clip_rect(rect.intersect(ui.clip_rect()));
     let mut picked = None;
-    for (i, text) in starters.iter().enumerate() {
-        let starter = Rect::from_min_size(pos2(rect.left() + 18.0, y), vec2(rect.width() - 36.0, 38.0));
-        let response = ui.interact(starter, Id::unique(("spaceui-starter", i)), Sense::click());
-        let hot = response.hovered() && ui.is_enabled();
-        let border = if hot { p.accent.gamma_multiply(0.5) } else { p.border_soft };
-        ui.painter().rect(
-            starter,
-            10.0,
-            if hot { p.field_hover } else { p.field },
-            Stroke::new(1.0, border),
-            StrokeKind::Inside,
-        );
-        let spark = Rect::from_center_size(pos2(starter.left() + 18.0, starter.center().y), Vec2::splat(14.0));
-        Icon::Sparkle.paint(ui.painter(), spark, p.accent_hi);
-        let galley = truncated(ui, text, FontId::proportional(13.0), p.text_2, starter.width() - 46.0);
-        ui.painter().galley(pos2(starter.left() + 34.0, starter.center().y - galley.size().y / 2.0), galley, p.text_2);
-        if hot {
-            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
-        }
-        if response.clicked() {
-            picked = Some(i);
-        }
-        y += 46.0;
-    }
+    ScrollArea::vertical().max_height(rect.height()).show(&mut child, |ui| {
+        ui.vertical_centered(|ui| {
+            let block = 170.0 + starters.len() as f32 * 46.0;
+            ui.add_space(((rect.height() - block) / 2.0).max(0.0));
+            if let Some(logo) = logo {
+                let (spot, _) = ui.allocate_exact_size(Vec2::splat(78.0_f32.min(rect.width())), Sense::hover());
+                paint::radial_glow(ui.painter(), spot.center(), 50.0, p.accent, 34);
+                logo.paint(ui.painter(), spot, Color32::WHITE);
+            }
+            ui.add(Label::new(RichText::new(headline).font(semibold(18.0)).color(p.text)).wrap());
+            ui.add(Label::new(RichText::new(hint).size(12.5).color(p.muted)).wrap());
+            ui.add_space(12.0);
+            for (i, text) in starters.iter().enumerate() {
+                if ui.add_sized(vec2(ui.available_width().max(0.0), 38.0), egui::Button::new(*text).wrap()).clicked() {
+                    picked = Some(i);
+                }
+            }
+        });
+    });
     picked
 }

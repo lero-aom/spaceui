@@ -3,6 +3,10 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -10,27 +14,142 @@ env:
 
 jobs:
   check:
-    name: ${{ matrix.os }} · ${{ matrix.toolchain }}
+    name: ${{ matrix.os }} / Rust ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
         toolchain: [stable, "1.95"]
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
         with:
           toolchain: ${{ matrix.toolchain }}
-          components: clippy, rustfmt
-      - name: System libraries for the gallery (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libgl1-mesa-dev libxcursor-dev libxrandr-dev libxi-dev libwayland-dev
       - run: cargo fmt --check
         if: matrix.toolchain == 'stable'
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --all-targets
-      - run: cargo test --doc
-      - run: cargo doc --no-deps
-      - run: cargo package --allow-dirty
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Unit, interaction and example tests
+        run: cargo test --locked --all-features --lib --test widgets --test shell --test chat --examples
+      - run: cargo test --locked --all-features --doc
+      - run: cargo doc --locked --all-features --no-deps
+      - run: cargo package --locked
         if: matrix.toolchain == 'stable'
+
+  features:
+    name: Features / ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: core, args: "--no-default-features"}
+          - {name: svg, args: "--no-default-features --features svg"}
+          - {name: shell, args: "--no-default-features --features shell"}
+          - {name: chat, args: "--no-default-features --features chat"}
+          - {name: native, args: "--no-default-features --features native"}
+          - {name: screenshot, args: "--no-default-features --features screenshot"}
+          - {name: default, args: ""}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          toolchain: "1.95"
+      - run: cargo check --locked --lib ${{ matrix.args }}
+      - run: cargo test --locked --lib ${{ matrix.args }}
+      - run: cargo doc --locked --no-deps ${{ matrix.args }}
+
+  visual:
+    name: Rendered regression snapshots
+    runs-on: ubuntu-latest
+    env:
+      WGPU_BACKEND: vulkan
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Install software Vulkan renderer
+        run: sudo apt-get install -y mesa-vulkan-drivers
+      - run: cargo test --locked --test visual --all-features
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: visual-differences
+          path: |
+            tests/snapshots/
+            snapshots/
+          if-no-files-found: warn
+
+  consumer:
+    name: External consumer and benchmark compilation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - run: python .github/scripts/check_consumer.py
+      - run: cargo bench --locked --bench workloads --all-features --no-run
+      - run: cargo bench --locked --bench allocations --all-features --no-run
+      - run: python -B -m unittest discover -s .github/scripts -p "test_*.py"
+
+  fuzz:
+    name: Bounded parser and geometry fuzz smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          toolchain: nightly
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Prepare seed corpora
+        run: |
+          mkdir -p fuzz/corpus/markdown fuzz/corpus/geometry
+          cp fuzz/seeds/markdown/* fuzz/corpus/markdown/
+          cp fuzz/seeds/geometry/* fuzz/corpus/geometry/
+      - run: cargo +nightly fuzz run markdown -- -max_total_time=20 -max_len=65536 -timeout=10
+      - run: cargo +nightly fuzz run geometry -- -max_total_time=20 -max_len=284 -timeout=10
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: fuzz-findings
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+
+  dependencies:
+    uses: ./.github/workflows/dependencies.yml
+
+  semver:
+    name: Published API compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Resolve published baseline (404 is an explicit first-release state)
+        id: baseline
+        run: python .github/scripts/semver_baseline.py
+      - uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2
+        if: steps.baseline.outputs.version != ''
+        with:
+          baseline-version: ${{ steps.baseline.outputs.version }}
+          feature-group: default-features
+      - uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2
+        if: steps.baseline.outputs.version != ''
+        with:
+          baseline-version: ${{ steps.baseline.outputs.version }}
+          feature-group: all-features

@@ -1,12 +1,18 @@
 use super::Tone;
-use crate::{Icon, Theme, text::truncated, theme::semibold};
-use egui::{CursorIcon, FontId, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2, pos2, vec2};
+#[cfg(feature = "svg")]
+use crate::Icon;
+use crate::{Theme, text::truncated, theme::semibold};
+use egui::{CursorIcon, Response, Role, Sense, Shape, Stroke, StrokeKind, Ui, WidgetInfo, pos2, vec2};
+#[cfg(feature = "svg")]
+use egui::{Rect, Vec2};
 
 /// A small tinted status tag ("READ-ONLY", "PAPER"), sized to its text.
 pub fn chip(ui: &mut Ui, text: &str, tone: Tone) {
     let color = tone.color(&Theme::of(ui.ctx()).palette);
-    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.into(), semibold(10.5), color));
-    let (rect, _) = ui.allocate_exact_size(galley.size() + vec2(16.0, 7.0), Sense::hover());
+    let font = semibold(super::text_size(ui, 10.5));
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.into(), font, color));
+    let (rect, response) = ui.allocate_exact_size(galley.size() + vec2(16.0, 7.0), Sense::hover());
+    response.widget_info(|| WidgetInfo::labeled(Role::Label, ui.is_enabled(), text));
     ui.painter().rect(
         rect,
         6.0,
@@ -21,9 +27,12 @@ pub fn chip(ui: &mut Ui, text: &str, tone: Tone) {
 pub fn pill(ui: &mut Ui, dot: Option<Tone>, text: &str) -> Response {
     let theme = Theme::of(ui.ctx());
     let p = &theme.palette;
-    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.into(), FontId::proportional(12.5), p.text_2));
+    let font = super::text_font(ui, 12.5);
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.into(), font, p.text_2));
     let lead = if dot.is_some() { 24.0 } else { 12.0 };
-    let (rect, response) = ui.allocate_exact_size(vec2(galley.size().x + lead + 12.0, 28.0), Sense::click());
+    let height = 28.0_f32.max(galley.size().y + 12.0);
+    let (rect, response) = ui.allocate_exact_size(vec2(galley.size().x + lead + 12.0, height), Sense::click());
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, ui.is_enabled(), text));
     let hot = response.hovered();
     ui.painter().rect(
         rect,
@@ -38,15 +47,20 @@ pub fn pill(ui: &mut Ui, dot: Option<Tone>, text: &str) -> Response {
         ui.painter().circle_filled(center, 3.5, color);
     }
     ui.painter().galley(pos2(rect.left() + lead, rect.center().y - galley.size().y / 2.0), galley, p.text_2);
+    super::focus_ring(ui, &response, theme.metrics.pill_radius);
     response.on_hover_cursor(CursorIcon::PointingHand)
 }
 
 /// A tinted pill led by an icon, for standing facts ("Read-only").
+#[cfg(feature = "svg")]
 pub fn badge(ui: &mut Ui, icon: Icon, text: &str, tone: Tone) -> Response {
     let theme = Theme::of(ui.ctx());
     let color = tone.color(&theme.palette);
-    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.into(), semibold(11.5), color));
-    let (rect, response) = ui.allocate_exact_size(vec2(galley.size().x + 36.0, 28.0), Sense::hover());
+    let font = semibold(super::text_size(ui, 11.5));
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.into(), font, color));
+    let height = 28.0_f32.max(galley.size().y + 12.0);
+    let (rect, response) = ui.allocate_exact_size(vec2(galley.size().x + 36.0, height), Sense::hover());
+    response.widget_info(|| WidgetInfo::labeled(Role::Label, ui.is_enabled(), text));
     ui.painter().rect(
         rect,
         theme.metrics.pill_radius,
@@ -79,8 +93,11 @@ pub fn dropdown(ui: &mut Ui, dot: Option<Tone>, text: &str, max_width: f32) -> R
     let theme = Theme::of(ui.ctx());
     let p = &theme.palette;
     let lead = if dot.is_some() { 20.0 } else { 10.0 };
-    let galley = truncated(ui, text, FontId::proportional(12.5), p.text_2, max_width);
-    let (rect, response) = ui.allocate_exact_size(vec2(lead + galley.size().x + 26.0, 28.0), Sense::click());
+    let max_width = if max_width.is_finite() { max_width.max(0.0) } else { ui.available_width() };
+    let galley = truncated(ui, text, super::text_font(ui, 12.5), p.text_2, max_width);
+    let height = 28.0_f32.max(galley.size().y + 12.0);
+    let (rect, response) = ui.allocate_exact_size(vec2(lead + galley.size().x + 26.0, height), Sense::click());
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, ui.is_enabled(), text));
     let painter = ui.painter();
     if response.hovered() || response.is_pointer_button_down_on() {
         painter.rect_filled(rect, theme.metrics.control_radius, p.field_hover);
@@ -89,7 +106,11 @@ pub fn dropdown(ui: &mut Ui, dot: Option<Tone>, text: &str, max_width: f32) -> R
         painter.circle_filled(pos2(rect.left() + 11.0, rect.center().y), 3.5, dot.color(p));
     }
     painter.galley(pos2(rect.left() + lead, rect.center().y - galley.size().y / 2.0), galley, p.text_2);
-    let chevron = Rect::from_center_size(pos2(rect.right() - 12.0, rect.center().y), Vec2::splat(12.0));
-    Icon::ChevronDown.paint(painter, chevron, p.muted);
+    let center = pos2(rect.right() - 12.0, rect.center().y);
+    painter.add(Shape::line(
+        vec![center + vec2(-3.0, -1.5), center + vec2(0.0, 1.5), center + vec2(3.0, -1.5)],
+        Stroke::new(1.2, p.muted),
+    ));
+    super::focus_ring(ui, &response, theme.metrics.control_radius);
     response.on_hover_cursor(CursorIcon::PointingHand)
 }

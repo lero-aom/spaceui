@@ -1,8 +1,11 @@
 //! The shell's layout and rail, driven headlessly.
+#![cfg(feature = "shell")]
 mod common;
 
 use common::Harness;
-use spaceui::egui::{Pos2, Ui, pos2, vec2};
+use egui_kittest::kittest::{NodeT, Queryable};
+use spaceui::egui::{Key, Pos2, Role, Ui, Vec2, ViewportId, pos2, vec2};
+use spaceui::shell::WindowLabels;
 use spaceui::{Icon, Metrics, RailItem, Regions, Shell, Theme};
 
 const RAIL: &[RailItem] = &[
@@ -135,4 +138,211 @@ fn a_disabled_shell_ignores_rail_clicks() {
         let _ = Shell::new("Test").rail(RAIL).enabled(false).show(ui, &mut page);
     });
     assert_eq!(page, 0);
+}
+
+#[test]
+fn constrained_windows_keep_regions_ordered_and_inside_the_viewport() {
+    for width in [40.0, 160.0, 320.0, 800.0] {
+        for height in [30.0, 100.0, 600.0] {
+            let mut harness = Harness::new();
+            harness.window = spaceui::egui::Rect::from_min_size(Pos2::ZERO, vec2(width, height));
+            let (mut page, mut left, mut right) = (0, f32::NAN, 2000.0);
+            let shown = regions(&mut harness, |ui| {
+                Shell::new("Small")
+                    .rail(RAIL)
+                    .left_column(&mut left, 320.0..=560.0)
+                    .right_column(&mut right, 320.0..=560.0)
+                    .status_bar(22.0)
+                    .show(ui, &mut page)
+            });
+            for part in [Some(shown.main), shown.left, shown.right, shown.status].into_iter().flatten() {
+                assert!(part.is_finite() && part.width() >= 0.0 && part.height() >= 0.0, "{part:?}");
+                assert!(harness.window.contains_rect(part), "{part:?} outside {:?}", harness.window);
+            }
+        }
+    }
+}
+
+const LONG_RAIL: &[RailItem] = &[
+    RailItem::page(Icon::Home, "First page"),
+    RailItem::page(Icon::Home, "Second page"),
+    RailItem::page(Icon::Home, "Third page"),
+    RailItem::Divider,
+    RailItem::page(Icon::Home, "Fourth page"),
+    RailItem::page(Icon::Home, "Fifth page"),
+    RailItem::page(Icon::Home, "Sixth page"),
+    RailItem::page(Icon::Home, "Last page"),
+];
+
+fn accessible_shell<State: 'static>(
+    size: Vec2,
+    state: State,
+    app: impl FnMut(&mut Ui, &mut State) + 'static,
+) -> egui_kittest::Harness<'static, State> {
+    egui_kittest::Harness::builder()
+        .with_size(size)
+        .with_context_setup(|ctx| {
+            Theme { fonts: spaceui::Fonts::BUNDLED, ..Default::default() }.install(ctx);
+        })
+        .build_ui_state(app, state)
+}
+
+fn assert_visible_in_rail(rect: spaceui::egui::Rect, window_height: f32) {
+    let metrics = Metrics::default();
+    let bottom = window_height - metrics.gap * 1.5;
+    assert!(rect.top() >= metrics.title_bar - 1.0, "tile is above the rail: {rect:?}");
+    assert!(rect.bottom() <= bottom + 1.0, "tile is below the rail: {rect:?}");
+}
+
+#[test]
+fn rail_keyboard_navigation_reveals_overflow_pages() {
+    let mut harness = accessible_shell(vec2(420.0, 240.0), 0, |ui, page| {
+        let _ = Shell::new("Small window").rail(LONG_RAIL).show(ui, page);
+    });
+    harness.get_by_label("First page").focus();
+    harness.run();
+    harness.key_press(Key::End);
+    harness.run();
+    assert_eq!(*harness.state(), 6);
+    let last = harness.get_by_label("Last page");
+    assert!(last.is_focused());
+    assert_eq!(last.accesskit_node().role(), Role::Tab);
+    assert_eq!(last.accesskit_node().is_selected(), Some(true));
+    assert_visible_in_rail(last.rect(), 240.0);
+
+    harness.key_press(Key::Home);
+    harness.run();
+    assert_eq!(*harness.state(), 0);
+    let first = harness.get_by_label("First page");
+    assert!(first.is_focused());
+    assert_visible_in_rail(first.rect(), 240.0);
+    harness.key_press(Key::ArrowDown);
+    harness.run();
+    assert_eq!(*harness.state(), 1);
+    assert!(harness.get_by_label("Second page").is_focused());
+}
+
+#[test]
+fn a_screen_reader_can_scroll_to_and_activate_an_overflow_page() {
+    let mut harness = accessible_shell(vec2(420.0, 240.0), 0, |ui, page| {
+        let _ = Shell::new("Small window").rail(LONG_RAIL).show(ui, page);
+    });
+    assert!(harness.get_by_label("Last page").rect().top() > 240.0);
+    harness.get_by_label("Last page").scroll_to_me();
+    harness.run();
+    assert_visible_in_rail(harness.get_by_label("Last page").rect(), 240.0);
+    harness.get_by_label("Last page").click();
+    harness.run();
+    assert_eq!(*harness.state(), 6);
+}
+
+#[test]
+fn splitters_support_keyboard_and_accessibility_adjustments() {
+    let mut harness = accessible_shell(vec2(1400.0, 900.0), (0, [300.0, 300.0]), |ui, (page, widths)| {
+        let [left, right] = widths;
+        let _ =
+            Shell::new("Columns").left_column(left, 200.0..=400.0).right_column(right, 200.0..=400.0).show(ui, page);
+    });
+    for (index, name, after_right) in [(0, "Left column width", 310.0), (1, "Right column width", 290.0)] {
+        let splitter = harness.get_by_label(name);
+        assert_eq!(splitter.accesskit_node().role(), Role::Splitter);
+        splitter.focus();
+        harness.run();
+        for (key, expected) in [(Key::ArrowRight, after_right), (Key::Home, 200.0), (Key::End, 400.0)] {
+            harness.key_press(key);
+            harness.run();
+            assert!((harness.state().1[index] - expected).abs() < 0.01);
+            assert!(harness.get_by_label(name).is_focused());
+        }
+        harness.get_by_label(name).set_value_accesskit(-100.0);
+        harness.run();
+        assert!((harness.state().1[index] - 200.0).abs() < 0.01);
+        harness.get_by_label(name).increment_accesskit();
+        harness.run();
+        assert!((harness.state().1[index] - 210.0).abs() < 0.01);
+        harness.get_by_label(name).decrement_accesskit();
+        harness.run();
+        assert!((harness.state().1[index] - 200.0).abs() < 0.01);
+        harness.get_by_label(name).set_value_accesskit(1000.0);
+        harness.run();
+        assert!((harness.state().1[index] - 400.0).abs() < 0.01);
+        assert_eq!(harness.get_by_label(name).accesskit_node().numeric_value(), Some(400.0));
+    }
+}
+
+#[test]
+fn disabled_shell_blocks_rail_and_splitter_actions_but_keeps_window_controls() {
+    let mut harness = accessible_shell(vec2(1000.0, 600.0), (0, 300.0), |ui, (page, width)| {
+        let _ = Shell::new("Blocked").rail(RAIL).right_column(width, 200.0..=400.0).enabled(false).show(ui, page);
+    });
+    assert!(harness.get_by_label("Right column width").accesskit_node().is_disabled());
+    assert!(harness.get_by_label("Markets").accesskit_node().is_disabled());
+    assert!(!harness.get_by_label("Close window").accesskit_node().is_disabled());
+    harness.get_by_label("Right column width").set_value_accesskit(400.0);
+    harness.get_by_label("Right column width").increment_accesskit();
+    harness.get_by_label("Markets").click_accesskit();
+    harness.key_press(Key::End);
+    harness.run();
+    assert_eq!(harness.state().0, 0);
+    assert!((harness.state().1 - 300.0).abs() < 0.01);
+}
+
+#[test]
+fn window_labels_accept_runtime_translations() {
+    let mut harness = accessible_shell(
+        vec2(1000.0, 600.0),
+        (0, 300.0, String::from("Fermer la fenêtre")),
+        |ui, (page, width, close)| {
+            let labels = WindowLabels {
+                close: close.as_str(),
+                minimize: "Réduire",
+                maximize: "Agrandir",
+                restore: "Restaurer",
+                move_window: "Déplacer",
+                left_column_width: "Largeur du panneau",
+                resize: [
+                    "Coin supérieur gauche",
+                    "Coin supérieur droit",
+                    "Coin inférieur gauche",
+                    "Coin inférieur droit",
+                    "Bord supérieur",
+                    "Bord inférieur",
+                    "Bord gauche",
+                    "Bord droit",
+                ],
+                ..Default::default()
+            };
+            let _ = Shell::new("Traduit").labels(labels).left_column(width, 200.0..=400.0).show(ui, page);
+        },
+    );
+    for name in ["Fermer la fenêtre", "Réduire", "Agrandir"] {
+        assert_eq!(harness.get_by_label(name).accesskit_node().role(), Role::Button);
+    }
+    assert_eq!(harness.get_by_label("Largeur du panneau").accesskit_node().role(), Role::Splitter);
+    assert!(harness.query_by_label("Close window").is_none());
+    assert!(harness.query_by_label("Move window").is_none());
+    assert!(harness.query_by_label("Resize top left").is_none());
+    let title_bar = harness.get_by_label("Traduit");
+    assert_eq!(title_bar.accesskit_node().role(), Role::TitleBar);
+    assert_eq!(title_bar.accesskit_node().description().as_deref(), Some("Déplacer"));
+    let _ = harness.get_by_label("Coin supérieur gauche");
+
+    harness.input_mut().viewports.get_mut(&ViewportId::ROOT).expect("root viewport").maximized = Some(true);
+    harness.run();
+    assert_eq!(harness.get_by_label("Restaurer").accesskit_node().role(), Role::Button);
+}
+
+#[test]
+fn title_buttons_remain_usable_above_a_modal() {
+    let mut harness = accessible_shell(vec2(900.0, 600.0), 0, |ui, page| {
+        let _ = Shell::new("Modal test").rail(RAIL).enabled(false).show(ui, page);
+        spaceui::egui::Modal::new(spaceui::egui::Id::unique("blocking-modal")).show(ui.ctx(), |ui| {
+            ui.label("The workspace is blocked");
+        });
+    });
+    harness.get_by_label("Minimize window").click();
+    // Inspect the release frame before subsequent idle frames clear commands.
+    harness.step();
+    let commands = &harness.output().viewport_output[&ViewportId::ROOT].commands;
+    assert!(commands.iter().any(|command| matches!(command, spaceui::egui::ViewportCommand::Minimized(true))));
 }

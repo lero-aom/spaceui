@@ -93,6 +93,27 @@ fn main() -> eframe::Result {
 
 SpaceUI re-exports egui as `spaceui::egui`, so your app and SpaceUI always agree on its version.
 
+## Features
+
+The default enables the complete desktop kit. For themes, painting and basic widgets only:
+
+```toml
+spaceui = { version = "0.1", default-features = false }
+```
+
+| Feature | Adds |
+|---|---|
+| `svg` | SVG art, icons and controls that use them; enables `resvg` |
+| `shell` | The window shell and rail; enables `svg` |
+| `chat` | Chat components and the compact Markdown renderer; enables `svg` |
+| `native` | Native window-handle integration; enables `raw-window-handle` |
+| `screenshot` | PNG screenshot runs; enables `svg` |
+
+All five are enabled by default. For example, `default-features = false, features = ["chat"]` adds the
+chat kit without native window integration. Use `cargo doc --no-deps --no-default-features` to see the
+core API, or `cargo doc --no-deps --all-features` for everything. See the
+[integration guide](docs/integration.md) for composition, accessibility and known limits.
+
 ## Examples
 
 | Example | Shows |
@@ -195,10 +216,16 @@ SPACEUI_SCREENSHOT=out.png SPACEUI_THEME=deep_space SPACEUI_PAGE=2 cargo run --e
 ```
 
 SpaceUI's own tests drive the widgets headlessly with simulated clicks and key presses; see [`tests/`](tests).
+Rendered snapshots cover representative layouts in both themes, and `cargo bench --bench workloads`
+measures representative CPU workloads. See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and snapshot review.
 
 ## Platform support
 
-SpaceUI runs wherever egui does.
+SpaceUI targets desktop egui applications. CI is configured to compile and run headless tests on Windows,
+Linux and macOS, on stable Rust and the MSRV. Rendered regression tests run separately on Linux with a
+software Vulkan renderer. These checks do not exercise native window-manager behavior or screen readers.
+Browser/WASM, mobile, other architectures and OS versions are not currently covered; egui support alone
+does not establish SpaceUI support. See the [support matrix](docs/support.md).
 
 - **Fonts.** On Windows, Segoe UI, Segoe UI Semibold, Segoe UI Symbol and Segoe UI Emoji are read from the system at
   runtime, never bundled. Elsewhere egui's bundled fonts stand in under the same family names.
@@ -211,10 +238,15 @@ SpaceUI runs wherever egui does.
 SpaceUI's MSRV is 1.95, the minimum of egui 0.37. It is raised only in minor releases, and only when the egui version
 SpaceUI builds on requires it.
 
+The API is pre-1.0. Patch releases preserve the supported public API; breaking changes require a minor release
+and migration notes. See the [compatibility and release policy](docs/releases.md).
+
 ## Contributing
 
 Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) explains the checks, the design rules and how to add
 an icon.
+Report ordinary bugs through [GitHub issues](https://github.com/lero-aom/spaceui/issues); follow
+[SECURITY.md](SECURITY.md) for potential vulnerabilities.
 
 ## License
 

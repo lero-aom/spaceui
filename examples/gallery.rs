@@ -179,8 +179,13 @@ impl Gallery {
                     ui.add_enabled_ui(false, |ui| widgets::primary(ui, "Disabled"));
                 });
                 ui.horizontal(|ui| {
-                    for icon in [Icon::Search, Icon::Reload, Icon::Star, Icon::More] {
-                        widgets::icon_button(ui, icon, 34.0).on_hover_text(icon.name());
+                    for (icon, label) in [
+                        (Icon::Search, "Search"),
+                        (Icon::Reload, "Reload"),
+                        (Icon::Star, "Favorite"),
+                        (Icon::More, "More actions"),
+                    ] {
+                        widgets::icon_button_labeled(ui, icon, 34.0, label);
                     }
                 });
                 ui.add_space(8.0);
@@ -206,14 +211,16 @@ impl Gallery {
             widgets::card(&mut columns[1], |ui| {
                 ui.set_width(ui.available_width());
                 widgets::section(ui, "03", "Inputs");
-                widgets::text_field(ui, &mut self.search, "Search symbols, companies or strategies…");
+                widgets::text_field(ui, &mut self.search, "Search symbols, companies or strategies…")
+                    .accessible_name("Symbol search");
                 ui.horizontal(|ui| {
-                    widgets::switch(ui, &mut self.switch);
+                    widgets::switch_labeled(ui, &mut self.switch, "Enable agent");
                     ui.label(if self.switch { "Agent on" } else { "Agent off" });
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Effort");
-                    widgets::notches(ui, 160.0, EFFORTS.len(), &mut self.effort);
+                    let label = ui.label("Effort");
+                    widgets::notches_labeled(ui, 160.0, EFFORTS.len(), &mut self.effort, "Effort")
+                        .labelled_by(label.id);
                     ui.label(EFFORTS[self.effort]);
                 });
                 ui.add_space(8.0);
@@ -296,9 +303,11 @@ impl Gallery {
             ui,
             layout.composer,
             |ui| {
-                let model = widgets::dropdown(ui, Some(Tone::Positive), "Gallery · Scripted", 150.0);
+                let model = widgets::dropdown(ui, Some(Tone::Positive), "Gallery · Scripted", 150.0)
+                    .accessible_name("Model: Gallery · Scripted");
                 egui::Popup::menu(&model).show(|ui| ui.label("Apps list their models here."));
-                let level = widgets::dropdown(ui, None, EFFORTS[effort], 100.0);
+                let level = widgets::dropdown(ui, None, EFFORTS[effort], 100.0)
+                    .accessible_name(format!("Reasoning effort: {}", EFFORTS[effort]));
                 egui::Popup::menu(&level).show(|ui| {
                     for (i, name) in EFFORTS.iter().enumerate() {
                         if ui.selectable_label(i == effort, *name).clicked() {
@@ -380,6 +389,7 @@ fn palette_and_icons(ui: &mut egui::Ui) {
         widgets::section(ui, "02", &format!("Icons · {}", Icon::ALL.len()));
         rows(ui, Icon::ALL, 40.0, |ui, icon| {
             let (cell, response) = ui.allocate_exact_size(vec2(40.0, 40.0), egui::Sense::hover());
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, ui.is_enabled(), icon.name()));
             if response.hovered() {
                 ui.painter().rect_filled(cell, 8.0, p.field_hover);
             }

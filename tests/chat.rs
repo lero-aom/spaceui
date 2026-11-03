@@ -1,4 +1,5 @@
 //! The chat kit's tab strip and composer, driven headlessly.
+#![cfg(feature = "chat")]
 mod common;
 
 use common::Harness;
@@ -84,4 +85,146 @@ fn an_empty_draft_cannot_be_sent_and_a_busy_composer_offers_stop() {
         });
         assert_eq!(response, expected, "draft {draft:?}, busy {busy}");
     }
+}
+
+#[test]
+fn overflowing_tabs_expose_every_conversation_and_keep_the_active_one_visible() {
+    use egui_kittest::kittest::Queryable as _;
+    let tabs: Vec<_> = (0..12)
+        .map(|id| Tab {
+            id,
+            title: if id == 0 {
+                "Hidden first"
+            } else if id == 11 {
+                "Active last"
+            } else {
+                "Other"
+            },
+            busy: false,
+            closable: true,
+        })
+        .collect();
+    let mut harness = egui_kittest::Harness::new_ui_state(
+        |ui, action| {
+            let rect = Rect::from_min_size(pos2(20.0, 20.0), vec2(280.0, 34.0));
+            if let Some(next) = chat::tab_strip(ui, rect, &tabs, 11) {
+                *action = Some(next);
+            }
+        },
+        None::<TabAction>,
+    );
+    assert!(harness.query_by_label("Active last").is_some());
+    assert!(harness.query_by_label("Hidden first").is_none());
+    harness.get_by_label("All chats").focus();
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+    harness.get_by_label("Hidden first").focus();
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+    assert_eq!(*harness.state(), Some(TabAction::Select(0)));
+}
+
+#[test]
+fn two_tab_strips_can_reuse_conversation_ids_and_close_with_the_keyboard() {
+    use egui_kittest::kittest::{NodeT as _, Queryable as _};
+    let mut harness = egui_kittest::Harness::new_ui_state(
+        |ui, action| {
+            let first = [Tab { id: 1, title: "Left", busy: false, closable: true }];
+            let second = [Tab { id: 1, title: "Right", busy: false, closable: true }];
+            let _ = chat::tab_strip(ui, Rect::from_min_size(pos2(20.0, 20.0), vec2(260.0, 34.0)), &first, 0);
+            if let Some(next) =
+                chat::tab_strip(ui, Rect::from_min_size(pos2(20.0, 80.0), vec2(260.0, 34.0)), &second, 0)
+            {
+                *action = Some(next);
+            }
+        },
+        None::<TabAction>,
+    );
+    assert_ne!(
+        harness.get_by_label("Close chat: Left").accesskit_node().id(),
+        harness.get_by_label("Close chat: Right").accesskit_node().id()
+    );
+    harness.get_by_label("Close chat: Right").focus();
+    harness.run();
+    harness.key_press(Key::Space);
+    harness.run();
+    assert_eq!(*harness.state(), Some(TabAction::Close(0)));
+}
+
+#[test]
+fn composer_controls_have_translated_names_and_disable_empty_sends() {
+    use egui_kittest::kittest::{NodeT as _, Queryable as _};
+    let labels = chat::ChatLabels { send: "Senden", stop: "Anhalten", ..Default::default() };
+    let mut harness = egui_kittest::Harness::new_ui_state(
+        |ui, state: &mut (String, bool)| {
+            let response = Composer::new(1, &mut state.0).labels(labels).show(
+                ui,
+                Rect::from_min_size(pos2(20.0, 20.0), vec2(360.0, 120.0)),
+                |_| {},
+            );
+            state.1 |= response.send;
+        },
+        (String::new(), false),
+    );
+    assert!(harness.get_by_label("Senden").accesskit_node().is_disabled());
+    harness.state_mut().0 = "Hallo".to_owned();
+    harness.run();
+    harness.get_by_label("Senden").focus();
+    harness.run();
+    harness.key_press(Key::Space);
+    harness.run();
+    assert!(harness.state().1);
+}
+
+#[test]
+fn markdown_links_are_named_and_keyboard_activatable() {
+    use egui_kittest::kittest::Queryable as _;
+    let mut harness = egui_kittest::Harness::new_ui_state(
+        |ui, opened| {
+            chat::markdown::render(ui, "Read [wiki](https://example.org/wiki)");
+            *opened |= ui.ctx().output(|output| {
+                output.commands.iter().any(|command| {
+            matches!(command, spaceui::egui::OutputCommand::OpenUrl(url) if url.url == "https://example.org/wiki")
+        })
+            });
+        },
+        false,
+    );
+    harness.get_by_label("wiki").focus();
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+    assert!(*harness.state());
+    *harness.state_mut() = false;
+    harness.get_by_label("wiki").click_accesskit();
+    harness.run();
+    assert!(*harness.state(), "assistive technology can activate the link");
+}
+
+#[test]
+fn reduced_motion_chat_settles_instead_of_repainting_forever() {
+    let mut harness = egui_kittest::Harness::new_ui(|ui| {
+        ui.style_mut().animation_time = 0.0;
+        chat::transcript::reply(ui, "Streaming", true);
+        let _ = chat::transcript::thinking_with_label(ui, "Reasoning", true, false, "Working");
+        chat::transcript::Step {
+            icon: spaceui::Icon::Search,
+            title: "Searching",
+            detail: "",
+            time: "",
+            status: chat::transcript::StepStatus::Running,
+        }
+        .show(ui, false, false);
+        let tabs = [Tab { id: 1, title: "Running", busy: true, closable: true }];
+        let _ = chat::tab_strip(ui, Rect::from_min_size(pos2(20.0, 180.0), vec2(280.0, 34.0)), &tabs, 0);
+        let mut draft = String::new();
+        let _ = Composer::new(1, &mut draft).busy(true).stoppable(false).show(
+            ui,
+            Rect::from_min_size(pos2(20.0, 240.0), vec2(360.0, 100.0)),
+            |_| {},
+        );
+    });
+    assert!(harness.run_ok().is_some());
 }

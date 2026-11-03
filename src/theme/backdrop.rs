@@ -3,7 +3,7 @@ use crate::paint;
 use egui::{Color32, ColorImage, Context, Id, LayerId, Painter, Rect, TextureHandle, TextureOptions, pos2, vec2};
 
 /// Paints the installed theme's backdrop on the background layer, under
-/// every panel. [`Shell::show`](crate::Shell::show) calls it for you.
+/// every panel. `Shell::show` (the `shell` feature) calls it for you.
 pub fn paint_backdrop(ctx: &Context) {
     let theme = Theme::of(ctx);
     let p = &theme.palette;

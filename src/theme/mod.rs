@@ -22,6 +22,29 @@ pub use palette::Palette;
 use egui::{Color32, Context, CornerRadius, Id, Stroke, TextStyle, Visuals, epaint::Shadow, vec2};
 use std::sync::Arc;
 
+/// Disable decorative motion and egui transitions in this context.
+/// Call after installing a theme. Disabling the preference restores the
+/// animation duration that was active before it was enabled. Applications
+/// can connect this to an OS preference or an in-app accessibility setting.
+pub fn set_reduced_motion(ctx: &Context, reduced: bool) {
+    let id = Id::unique("spaceui-animation-duration");
+    let modes = [egui::Theme::Dark, egui::Theme::Light];
+    if reduced {
+        let current = modes.map(|mode| ctx.style_of(mode).animation_time);
+        ctx.data_mut(|d| {
+            if d.get_temp::<[f32; 2]>(id).is_none() {
+                d.insert_temp(id, current);
+            }
+        });
+        ctx.all_styles_mut(|style| style.animation_time = 0.0);
+    } else if let Some(durations) = ctx.data_mut(|d| d.remove_temp::<[f32; 2]>(id)) {
+        for (mode, duration) in modes.into_iter().zip(durations) {
+            ctx.style_mut_of(mode, |style| style.animation_time = duration);
+        }
+    }
+    ctx.request_repaint();
+}
+
 /// Sizes the shell and widgets share, in points.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Metrics {
@@ -156,9 +179,18 @@ impl Theme {
     /// egui's visuals and spacing to match, and installs its fonts (only when
     /// they differ from the installed ones). Takes effect from the next frame.
     pub fn install(self, ctx: &Context) {
+        self.install_with_mode(ctx, egui::Theme::Dark);
+    }
+
+    /// Install a custom palette with matching egui light/dark defaults.
+    /// Built-in palettes are dark; a light palette should use `Theme::Light`.
+    pub fn install_with_mode(self, ctx: &Context, mode: egui::Theme) {
         fonts::install(ctx, &self.fonts);
-        ctx.set_theme(egui::ThemePreference::Dark);
-        ctx.set_visuals_of(egui::Theme::Dark, self.visuals());
+        ctx.set_theme(match mode {
+            egui::Theme::Dark => egui::ThemePreference::Dark,
+            egui::Theme::Light => egui::ThemePreference::Light,
+        });
+        ctx.set_visuals_of(mode, self.visuals_with_mode(mode));
         ctx.global_style_mut(|style| {
             style.spacing.item_spacing = vec2(10.0, 8.0);
             style.spacing.button_padding = vec2(12.0, 6.0);
@@ -187,8 +219,17 @@ impl Theme {
     /// palette. [`Theme::install`] applies it for you.
     #[must_use]
     pub fn visuals(&self) -> Visuals {
+        self.visuals_with_mode(egui::Theme::Dark)
+    }
+
+    /// Build egui visuals using light or dark base defaults and this palette.
+    #[must_use]
+    pub fn visuals_with_mode(&self, mode: egui::Theme) -> Visuals {
         let p = &self.palette;
-        let mut v = Visuals::dark();
+        let mut v = match mode {
+            egui::Theme::Dark => Visuals::dark(),
+            egui::Theme::Light => Visuals::light(),
+        };
         v.override_text_color = Some(p.text);
         v.panel_fill = Color32::TRANSPARENT;
         v.window_fill = p.panel_hi;
@@ -233,6 +274,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reduced_motion_restores_the_callers_duration() {
+        let ctx = Context::default();
+        ctx.global_style_mut(|style| style.animation_time = 0.37);
+        set_reduced_motion(&ctx, true);
+        set_reduced_motion(&ctx, true);
+        assert!(ctx.style_of(ctx.theme()).animation_time.abs() < f32::EPSILON);
+        Theme::default().install_with_mode(&ctx, egui::Theme::Light);
+        assert!(ctx.global_style().animation_time.abs() < f32::EPSILON);
+        set_reduced_motion(&ctx, false);
+        assert!((ctx.style_of(egui::Theme::Dark).animation_time - 0.37).abs() < f32::EPSILON);
+        assert!(ctx.style_of(egui::Theme::Light).animation_time > 0.0);
+    }
+
+    #[test]
+    fn a_custom_light_palette_can_use_light_egui_defaults() {
+        let ctx = Context::default();
+        Theme::default().install_with_mode(&ctx, egui::Theme::Light);
+        assert!(!ctx.style_of(ctx.theme()).visuals.dark_mode);
+    }
+
+    #[test]
     fn installing_a_theme_replaces_the_one_widgets_read() {
         let ctx = Context::default();
         assert_eq!(Theme::of(&ctx).name, Theme::default().name);
@@ -260,7 +322,10 @@ mod tests {
         for p in [Palette::CARBON_COPPER, Palette::DEEP_SPACE] {
             assert!(contrast(p.text, p.panel) >= 7.0);
             assert!(contrast(p.text_2, p.panel) >= 4.5);
-            assert!(contrast(p.on_accent, p.accent_lo) >= 3.0);
+            for step in 0..=100 {
+                let fill = crate::paint::mix(p.accent_lo, p.accent_hi, step as f32 / 100.0);
+                assert!(contrast(p.on_accent, fill) >= 4.5, "accent text at gradient step {step}");
+            }
         }
     }
 }

@@ -6,6 +6,41 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Optional SVG, shell, chat, native-window and screenshot features, with a core-only configuration.
+- Rendered regression baselines, expanded interaction and geometry tests, parser/geometry fuzz targets,
+  timing and allocation benchmarks, and an
+  external-consumer smoke check.
+- Windows, Linux and macOS stable/MSRV CI; feature-subset checks; dependency auditing, update automation,
+  published-API compatibility checks and an explicit release dry-run/publish workflow.
+- Integration, platform-support, compatibility and security-reporting documentation.
+- Translatable chat/window labels, light-mode installation for custom palettes, reduced-motion settings,
+  and labeled controls with keyboard and assistive-technology actions.
+
+### Changed
+
+- Public support claims distinguish automated checks from native-platform and accessibility validation.
+- Improved keyboard/accessibility metadata, input handling and rendering robustness; fallible SVG diagnostics
+  and bounded texture-cache behavior.
+- Built-in accent gradients use dark foregrounds and brighter low stops to retain 4.5:1 text contrast.
+- Bundled fallback fonts are enabled explicitly, independently of application/development dependencies.
+
+### Fixed
+
+- Repeated segmented-control IDs, text-field identity during layout changes, and slider change notifications.
+- Inaccessible overflowing chat tabs and rail pages, constrained-region geometry and decorative animation
+  when reduced motion is requested.
+- Repeated suffix scans and incomplete-delimiter handling in inline Markdown, with keyboard-accessible links.
+
+### Migration notes
+
+- `Svg::rasterize` and `Svg::window_icon` now return `None` for dimensions above 2048 pixels. Their new
+  `try_` counterparts report `SvgError::InvalidSize`; use a separate export rasterizer for larger output.
+  Painting still caps raster resolution at 2048 pixels.
+- Existing default features preserve the complete kit. Disabling defaults deliberately removes the SVG,
+  shell, chat, native-window and screenshot APIs unless their feature is selected.
+
 ## [0.1.0] - 2026-11-03
 
 First release.

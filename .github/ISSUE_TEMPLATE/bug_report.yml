@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible behavior or rendering problem
+body:
+  - type: markdown
+    attributes:
+      value: "For vulnerabilities, follow SECURITY.md. Do not include secrets or private application data."
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include keyboard steps or a screenshot when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Small reproducer
+      description: Code or steps using an example app, with selected Cargo features.
+      render: rust
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: SpaceUI/egui versions, rustc -Vv, OS, display scale and renderer. Include the assistive tool for accessibility issues.
+    validations:
+      required: true

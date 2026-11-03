@@ -25,12 +25,60 @@
 //! window can always be moved, maximized and closed, even while a modal
 //! blocks the workspace.
 mod rail;
+mod splitter;
 mod title_bar;
 mod window_edges;
 
 use crate::{Icon, Svg, Theme, theme::paint_backdrop, widgets};
-use egui::{CursorIcon, Id, Rect, Sense, Stroke, Ui, pos2, vec2};
+use egui::{Rect, Ui, pos2, vec2};
 use std::{fmt, ops::RangeInclusive};
+
+/// Translatable labels for window controls and column dividers. The strings
+/// are borrowed for the current frame and may come from a locale catalog.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowLabels<'a> {
+    /// Minimize action.
+    pub minimize: &'a str,
+    /// Maximize action.
+    pub maximize: &'a str,
+    /// Restore a maximized window.
+    pub restore: &'a str,
+    /// Close action.
+    pub close: &'a str,
+    /// The draggable title region.
+    pub move_window: &'a str,
+    /// Left column's resizable width.
+    pub left_column_width: &'a str,
+    /// Right column's resizable width.
+    pub right_column_width: &'a str,
+    /// Pointer resize regions, in northwest, northeast, southwest, southeast,
+    /// north, south, west, east order.
+    pub resize: [&'a str; 8],
+}
+
+impl Default for WindowLabels<'_> {
+    fn default() -> Self {
+        Self {
+            minimize: "Minimize window",
+            maximize: "Maximize window",
+            restore: "Restore window",
+            close: "Close window",
+            move_window: "Move window",
+            left_column_width: "Left column width",
+            right_column_width: "Right column width",
+            resize: [
+                "Resize top left",
+                "Resize top right",
+                "Resize bottom left",
+                "Resize bottom right",
+                "Resize top",
+                "Resize bottom",
+                "Resize left",
+                "Resize right",
+            ],
+        }
+    }
+}
 
 /// An entry in the icon rail.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -40,7 +88,7 @@ pub enum RailItem {
     Page {
         /// The tile's icon.
         icon: Icon,
-        /// The tooltip.
+        /// The tooltip and accessible page name.
         label: &'static str,
     },
     /// A short rule separating groups (Settings from the pages, say).
@@ -107,6 +155,7 @@ pub struct Shell<'a> {
     status: f32,
     enabled: bool,
     title_status: Option<TitleStatus<'a>>,
+    labels: WindowLabels<'a>,
 }
 
 impl fmt::Debug for Shell<'_> {
@@ -120,6 +169,7 @@ impl fmt::Debug for Shell<'_> {
             .field("status", &self.status)
             .field("enabled", &self.enabled)
             .field("title_status", &self.title_status.is_some())
+            .field("labels", &self.labels)
             .finish()
     }
 }
@@ -128,7 +178,30 @@ impl<'a> Shell<'a> {
     /// A shell titled `title`: the title bar and the main card, with no logo,
     /// rail, columns or status line yet.
     pub fn new(title: &'a str) -> Self {
-        Self { title, logo: None, rail: &[], left: None, right: None, status: 0.0, enabled: true, title_status: None }
+        Self {
+            title,
+            logo: None,
+            rail: &[],
+            left: None,
+            right: None,
+            status: 0.0,
+            enabled: true,
+            title_status: None,
+            labels: WindowLabels::default(),
+        }
+    }
+
+    /// Localized names for window actions and column dividers.
+    ///
+    /// ```
+    /// use spaceui::shell::{Shell, WindowLabels};
+    /// let shell = Shell::new("Mon application")
+    ///     .labels(WindowLabels { close: "Fermer la fenêtre", ..Default::default() });
+    /// # let _ = shell;
+    /// ```
+    pub fn labels(mut self, labels: WindowLabels<'a>) -> Self {
+        self.labels = labels;
+        self
     }
 
     /// The app's logo, beside the title.
@@ -140,21 +213,25 @@ impl<'a> Shell<'a> {
     /// An icon rail down the left edge with these pages and dividers.
     /// [`show`](Self::show) takes the selected page as an index counting
     /// pages only. Without a rail (or with no items), the space goes to the
-    /// cards.
+    /// cards. Overflow scrolls vertically. Up/Down and Home/End select and
+    /// reveal a page while the rail has keyboard focus.
     pub fn rail(mut self, items: &'a [RailItem]) -> Self {
         self.rail = items;
         self
     }
 
     /// A column left of the main card (after the rail), resizable within
-    /// `range`. The app keeps, and may persist, its width.
+    /// `range`. The app keeps, and may persist, its width. A focused divider
+    /// moves ten points with Left/Right; Home/End choose the width limits.
     pub fn left_column(mut self, width: &'a mut f32, range: RangeInclusive<f32>) -> Self {
         self.left = Some((width, range));
         self
     }
 
     /// A column right of the main card, resizable within `range`. The app
-    /// keeps, and may persist, its width.
+    /// keeps, and may persist, its width. Keyboard behavior matches
+    /// [`left_column`](Self::left_column); screen-reader increment/decrement
+    /// actions always increase/decrease the column's width.
     pub fn right_column(mut self, width: &'a mut f32, range: RangeInclusive<f32>) -> Self {
         self.right = Some((width, range));
         self
@@ -166,7 +243,7 @@ impl<'a> Shell<'a> {
         self
     }
 
-    /// `false` makes the rail inert, as under a blocking modal. The title bar
+    /// `false` makes the rail and column dividers inert, as under a blocking modal. The title bar
     /// stays usable either way, so the window can always be moved and closed.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
@@ -184,43 +261,67 @@ impl<'a> Shell<'a> {
     /// rail page, updated when the owner clicks another one.
     ///
     /// A column is clamped to its range and to half the window, or to 35% of
-    /// it when there are columns on both sides.
+    /// it when there are columns on both sides. Available space takes priority
+    /// over minimum widths in narrow windows; returned regions stay ordered.
     pub fn show(self, ui: &mut Ui, page: &mut usize) -> Regions {
         let ctx = ui.ctx().clone();
         let metrics = Theme::of(&ctx).metrics;
         paint_backdrop(&ctx);
         let window = ctx.content_rect();
-        title_bar::show(&ctx, window, self.title, self.logo, self.title_status);
+        title_bar::show(&ctx, window, self.title, self.logo, self.title_status, &self.labels);
 
-        let top = window.top() + metrics.title_bar;
-        let bottom = window.bottom() - metrics.gap - self.status.max(metrics.gap * 0.5);
-        let mut left_edge = window.left() + metrics.gap * 1.5;
+        let gap = finite_size(metrics.gap);
+        let status_height = finite_size(self.status);
+        let top = (window.top() + finite_size(metrics.title_bar)).min(window.bottom());
+        let bottom = (window.bottom() - gap - status_height.max(gap * 0.5)).max(top);
+        let mut left_edge = (window.left() + gap * 1.5).min(window.right());
         if !self.rail.is_empty() {
-            let rail =
-                Rect::from_min_max(pos2(window.left() + metrics.gap, top), pos2(window.left() + metrics.rail, bottom));
+            let rail = Rect::from_min_max(
+                pos2((window.left() + gap).min(window.right()), top),
+                pos2((window.left() + finite_size(metrics.rail).max(gap)).min(window.right()), bottom),
+            );
             rail::show(ui, rail, self.rail, page, self.enabled);
-            left_edge = rail.right() + 6.0;
+            left_edge = (rail.right() + 6.0).min(window.right());
         }
-        let mut right_edge = window.right() - metrics.gap * 1.5;
+        let mut right_edge = (window.right() - gap * 1.5).max(left_edge);
         let share = if self.left.is_some() && self.right.is_some() { 0.35 } else { 0.5 };
-        let gutter = metrics.gap * 1.75;
+        let count = usize::from(self.left.is_some()) + usize::from(self.right.is_some());
+        let available = (right_edge - left_edge - 36.0).max(0.0);
+        let gutter = (gap * 1.75).min(available / (count.max(1) * 2) as f32);
+        let cap = (window.width() * share).min((available - gutter * count as f32).max(0.0) / count.max(1) as f32);
 
         let left = self.left.map(|(width, range)| {
-            let (min, max) = limits(&range, window.width() * share);
-            *width = width.clamp(min, max);
+            let (min, max) = limits(&range, cap);
+            *width = finite_size(*width).clamp(min, max);
             let column = Rect::from_min_max(pos2(left_edge, top), pos2(left_edge + *width, bottom));
             left_edge = column.right() + gutter;
             let handle = Rect::from_min_max(pos2(column.right(), top + 20.0), pos2(left_edge, bottom - 20.0));
-            splitter(ui, handle, "spaceui-splitter-left", width, min, max, 1.0);
+            splitter::show(
+                ui,
+                handle,
+                width,
+                min..=max,
+                splitter::Side::Left,
+                self.labels.left_column_width,
+                self.enabled,
+            );
             column
         });
         let right = self.right.map(|(width, range)| {
-            let (min, max) = limits(&range, window.width() * share);
-            *width = width.clamp(min, max);
+            let (min, max) = limits(&range, cap);
+            *width = finite_size(*width).clamp(min, max);
             let column = Rect::from_min_max(pos2(right_edge - *width, top), pos2(right_edge, bottom));
             right_edge = column.left() - gutter;
             let handle = Rect::from_min_max(pos2(right_edge, top + 20.0), pos2(column.left(), bottom - 20.0));
-            splitter(ui, handle, "spaceui-splitter-right", width, min, max, -1.0);
+            splitter::show(
+                ui,
+                handle,
+                width,
+                min..=max,
+                splitter::Side::Right,
+                self.labels.right_column_width,
+                self.enabled,
+            );
             column
         });
 
@@ -228,38 +329,24 @@ impl<'a> Shell<'a> {
         for card in [Some(main), left, right].into_iter().flatten() {
             widgets::plate(ui.painter(), card);
         }
-        window_edges::show(&ctx);
+        window_edges::show(&ctx, &self.labels.resize);
         Regions {
-            main: main.shrink2(vec2(18.0, 14.0)),
+            main: main.shrink2(vec2(18.0_f32.min(main.width() * 0.5), 14.0_f32.min(main.height() * 0.5))),
             left,
             right,
-            status: (self.status > 0.0).then(|| {
-                Rect::from_min_max(
-                    pos2(window.left() + metrics.gap + 12.0, bottom + 2.0),
-                    pos2(window.right() - metrics.gap * 1.5 - 6.0, window.bottom() - 2.0),
-                )
-            }),
+            status: (status_height > 0.0)
+                .then(|| Rect::from_min_max(pos2(window.left(), bottom), pos2(window.right(), window.bottom()))),
         }
     }
 }
 
-/// A column's width limits: its range, capped at `cap` but never below the
-/// range's start.
-fn limits(range: &RangeInclusive<f32>, cap: f32) -> (f32, f32) {
-    let min = *range.start();
-    (min, range.end().min(cap).max(min))
+fn finite_size(value: f32) -> f32 {
+    if value.is_finite() { value.max(0.0) } else { 0.0 }
 }
 
-/// The drag handle between a column and the main card. `direction` is +1 for
-/// a left column (dragging right widens it) and -1 for a right one.
-fn splitter(ui: &Ui, rect: Rect, salt: &str, width: &mut f32, min: f32, max: f32, direction: f32) {
-    let response = ui.interact(rect, Id::unique(salt), Sense::drag());
-    if response.hovered() || response.dragged() {
-        ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
-        let accent = Theme::of(ui.ctx()).palette.accent;
-        ui.painter().vline(rect.center().x, rect.y_range().shrink(40.0), Stroke::new(2.0, accent.gamma_multiply(0.5)));
-    }
-    if response.dragged() {
-        *width = (*width + direction * response.drag_delta().x).clamp(min, max);
-    }
+/// Available space wins over a preferred minimum in a constrained window.
+fn limits(range: &RangeInclusive<f32>, cap: f32) -> (f32, f32) {
+    let cap = finite_size(cap);
+    let min = finite_size(*range.start()).min(cap);
+    (min, finite_size(*range.end()).max(min).min(cap))
 }

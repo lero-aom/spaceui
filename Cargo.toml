@@ -10,20 +10,54 @@ readme = "README.md"
 keywords = ["egui", "gui", "design-system", "theme", "widgets"]
 categories = ["gui"]
 # Screenshots and CI stay in the repository; the package carries the code, icons and gallery.
-exclude = ["/docs", "/.github", "/target"]
+exclude = ["/docs", "/.github", "/target", "/fuzz"]
+
+[features]
+default = ["svg", "shell", "chat", "native", "screenshot"]
+# Themes, painting and basic widgets work without any optional dependencies.
+svg = ["dep:resvg"]
+shell = ["svg"]
+chat = ["svg"]
+native = ["dep:raw-window-handle"]
+screenshot = ["svg"]
 
 [dependencies]
-egui = "0.37"
+egui = { version = "0.37", features = ["default_fonts"] }
 # Logos and icons stay SVG and are rasterized at the display's pixel density.
-resvg = { version = "0.45", default-features = false }
+resvg = { version = "0.45", default-features = false, optional = true }
 # Native window chrome (rounded corners on Windows 11).
-raw-window-handle = "0.6"
+raw-window-handle = { version = "0.6", optional = true }
 
 [dev-dependencies]
 eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "wayland", "x11"] }
+egui_kittest = { version = "0.37", features = ["wgpu", "snapshot"] }
+stats_alloc = "0.1.10"
+
+[[example]]
+name = "minimal"
+required-features = ["shell", "native"]
+
+[[example]]
+name = "custom_theme"
+required-features = ["shell", "native"]
+
+[[example]]
+name = "gallery"
+required-features = ["shell", "chat", "native", "screenshot"]
+
+[[bench]]
+name = "workloads"
+harness = false
+required-features = ["chat"]
+
+[[bench]]
+name = "allocations"
+harness = false
+required-features = ["chat"]
 
 [package.metadata.docs.rs]
-targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+all-features = true
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 
 [lints.rust]
 missing_docs = "warn"

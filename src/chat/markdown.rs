@@ -1,7 +1,13 @@
 //! A compact Markdown renderer for chat replies: headings, bullet and
-//! numbered lists, quotes, rules, fenced code, tables (as aligned rows) and
-//! inline **bold**, *italic*, `code` and `[links](url)`. Clicked web links
-//! open in the browser.
+//! numbered lists, quotes, rules, fenced code, table-like rows separated by
+//! dots, and inline **bold**, *italic*, `code` and `[links](url)`.
+//! Web links support pointer and keyboard activation.
+//!
+//! This is a deliberately small subset, not a `CommonMark` parser. It does not
+//! implement HTML, images, reference links, nested lists, syntax highlighting,
+//! or aligned table columns. Inline links accept simple destinations without
+//! nested parentheses. Backslash escapes are recognized; unmatched inline
+//! delimiters remain visible. Raw HTML is never executed. Only HTTP(S) links open.
 //!
 //! ```
 //! # use spaceui::{Theme, egui, chat::markdown};
@@ -16,7 +22,8 @@ use crate::{
     theme::{Palette, semibold},
 };
 use egui::{
-    Align2, Color32, CursorIcon, FontId, Frame, Label, OpenUrl, RichText, Sense, Stroke, Ui,
+    Align2, Color32, CursorIcon, FontId, Frame, Key, Label, Modifiers, OpenUrl, Rect, RichText, Role, Sense, Stroke,
+    Ui, WidgetInfo,
     text::{LayoutJob, TextFormat},
     vec2,
 };
@@ -113,29 +120,71 @@ fn marker_line(ui: &mut Ui, indent: f32, marker: &str, text: &str, p: &Palette) 
 /// One paragraph; a click on a web link opens it in the browser.
 fn paragraph(ui: &mut Ui, text: &str, font: &FontId, color: Color32, p: &Palette) {
     let (mut job, links) = inline_job_links(text, font, color, p);
-    job.wrap.max_width = ui.available_width();
+    job.wrap.max_width = ui.available_width().max(1.0);
     if links.is_empty() {
         ui.add(Label::new(job).wrap().selectable(true));
         return;
     }
-    // The label lays the job out the same way, so this copy tells which
-    // character is under the pointer.
-    let galley = ui.fonts_mut(|f| f.layout_job(job.clone()));
-    let response = ui.add(Label::new(job).wrap().selectable(true));
-    let Some(pointer) = response.hover_pos() else {
-        return;
-    };
-    let index = galley.cursor_from_pos(pointer - response.rect.min).index.0;
-    let Some((_, target)) =
-        links.iter().find(|(range, _)| range.start <= index && index < range.end.max(range.start + 1))
-    else {
-        return;
-    };
-    ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
-    let clicked = response.clicked();
-    response.on_hover_text_at_pointer(target.as_str());
-    if clicked && (target.starts_with("https://") || target.starts_with("http://")) {
-        ui.ctx().open_url(OpenUrl::new_tab(target));
+    let galley = ui.fonts_mut(|f| f.layout_job(job));
+    // Pass the same galley to the label so hit rectangles match wrapped glyphs.
+    let response = ui.add(Label::new(galley.clone()).selectable(true));
+    let mut rectangles = vec![Vec::new(); links.len()];
+    let mut row_start = 0;
+    let mut first_link = 0;
+    for row in &galley.rows {
+        let row_end = row_start + row.glyphs.len();
+        while first_link < links.len() && links[first_link].0.end <= row_start {
+            first_link += 1;
+        }
+        for (index, (range, _)) in links.iter().enumerate().skip(first_link) {
+            if range.start >= row_end {
+                break;
+            }
+            let start = range.start.max(row_start) - row_start;
+            let end = range.end.min(row_end) - row_start;
+            if start < end {
+                let left = row.glyphs[start].pos.x;
+                let right = row.glyphs[end - 1].max_x();
+                rectangles[index].push(Rect::from_min_max(
+                    response.rect.min + row.pos.to_vec2() + vec2(left, 0.0),
+                    response.rect.min + row.pos.to_vec2() + vec2(right, row.size.y),
+                ));
+            }
+        }
+        row_start = row_end + usize::from(row.ends_with_newline);
+    }
+    let displayed: Vec<char> = galley.text().chars().collect();
+    for (index, ((range, target), parts)) in links.iter().zip(rectangles).enumerate() {
+        let Some(bounds) = parts.iter().copied().reduce(Rect::union) else {
+            continue;
+        };
+        let id = response.id.with(("link", index));
+        let focus = ui.interact(bounds, id, Sense::focusable_noninteractive());
+        let label: String = displayed[range.clone()].iter().collect();
+        focus.widget_info(|| WidgetInfo::labeled(Role::Link, ui.is_enabled(), &label));
+        ui.ctx().accesskit_node_builder(id, |node| {
+            node.add_action(egui::accesskit::Action::Click);
+        });
+        let mut clicked = focus.has_focus()
+            && ui.is_enabled()
+            && ui.input_mut(|input| {
+                input.consume_key(Modifiers::NONE, Key::Enter) || input.consume_key(Modifiers::NONE, Key::Space)
+            });
+        clicked |=
+            ui.is_enabled() && ui.input(|input| input.has_accesskit_action_request(id, egui::accesskit::Action::Click));
+        for (part, rect) in parts.into_iter().enumerate() {
+            let hit = ui.interact(rect, id.with(part), Sense::click() - Sense::FOCUSABLE);
+            if hit.hovered() {
+                ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+            }
+            if hit.hovered() || focus.has_focus() {
+                ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(2.0, p.accent_hi));
+            }
+            clicked |= hit.on_hover_text(target).clicked();
+        }
+        if clicked {
+            ui.ctx().open_url(OpenUrl::new_tab(target));
+        }
     }
 }
 
@@ -175,45 +224,76 @@ fn inline_job_links(
         bold: false,
         italic: false,
         buffer: String::new(),
+        characters: 0,
     };
-    let chars: Vec<char> = text.chars().collect();
+    let markers = Markers::new(text);
+    let mut bold_end = None;
+    let mut italic_end = None;
     let mut i = 0;
-    while i < chars.len() {
-        let ch = chars[i];
-        let next = chars.get(i + 1).copied();
-        if ch == '*' && next == Some('*') || ch == '_' && next == Some('_') {
+    while i < text.len() {
+        let rest = &text[i..];
+        let ch = rest.chars().next().expect("i is a character boundary inside the text");
+        if ch == '\\'
+            && let Some(next) = rest[1..].chars().next()
+            && next.is_ascii_punctuation()
+        {
+            out.buffer.push(next);
+            i += 1 + next.len_utf8();
+            continue;
+        }
+        if bold_end == Some(i) {
             out.flush();
-            out.bold = !out.bold;
+            out.bold = false;
+            bold_end = None;
             i += 2;
-        } else if (ch == '*' || ch == '_')
-            && (out.italic || next.is_some_and(|n| !n.is_whitespace()))
-            && (ch == '*' || i == 0 || !chars[i - 1].is_alphanumeric())
+        } else if italic_end == Some(i) {
+            out.flush();
+            out.italic = false;
+            italic_end = None;
+            i += 1;
+        } else if !out.bold
+            && (rest.starts_with("**") || rest.starts_with("__"))
+            && let Some(end) = markers.emphasis_end(text, i, 2)
         {
             out.flush();
-            out.italic = !out.italic;
+            out.bold = true;
+            bold_end = Some(end);
+            i += 2;
+        } else if !out.italic
+            && (ch == '*' || ch == '_')
+            && !rest.starts_with("**")
+            && !rest.starts_with("__")
+            && let Some(end) = markers.emphasis_end(text, i, 1)
+        {
+            out.flush();
+            out.italic = true;
+            italic_end = Some(end);
             i += 1;
         } else if ch == '`'
-            && let Some(end) = chars[i + 1..].iter().position(|c| *c == '`')
+            && let Some(end) = markers.next(4, i)
         {
             out.flush();
-            let code: String = chars[i + 1..i + 1 + end].iter().collect();
+            let code = &text[i + 1..end];
             let format = TextFormat {
                 font_id: FontId::monospace(font.size - 1.5),
                 color: p.accent_hi,
                 background: p.field,
                 ..Default::default()
             };
-            out.job.append(&code, 2.0, format);
-            i += end + 2;
-        } else if let Some((label, target, used)) = markdown_link(&chars[i..]) {
-            out.link(&label, target, p);
+            out.job.append(code, 2.0, format);
+            out.characters += code.chars().count();
+            i = end + 1;
+        } else if ch == '['
+            && let Some((label, target, used)) = markdown_link(text, i, &markers)
+        {
+            out.link(label, target.to_owned(), p);
             i += used;
-        } else if let Some(url) = bare_url(&chars, i) {
-            i += url.chars().count();
-            out.link(&url.clone(), url, p);
+        } else if let Some(url) = bare_url(text, i) {
+            i += url.len();
+            out.link(url, url.to_owned(), p);
         } else {
             out.buffer.push(ch);
-            i += 1;
+            i += ch.len_utf8();
         }
     }
     out.flush();
@@ -229,6 +309,7 @@ struct Inline {
     bold: bool,
     italic: bool,
     buffer: String,
+    characters: usize,
 }
 
 impl Inline {
@@ -246,6 +327,7 @@ impl Inline {
         if !self.buffer.is_empty() {
             let format = self.format();
             self.job.append(&self.buffer, 0.0, format);
+            self.characters += self.buffer.chars().count();
             self.buffer.clear();
         }
     }
@@ -255,42 +337,104 @@ impl Inline {
         let mut format = self.format();
         format.color = p.accent_hi;
         format.underline = Stroke::new(1.0, p.accent_hi.gamma_multiply(0.5));
-        let start = self.job.text.chars().count();
+        let start = self.characters;
         self.job.append(label, 0.0, format);
-        self.links.push((start..start + label.chars().count(), target));
+        self.characters += label.chars().count();
+        self.links.push((start..self.characters, target));
     }
 }
 
-/// `[label](target "optional title")` at the start of `chars`: the label,
-/// the target and the characters used.
-fn markdown_link(chars: &[char]) -> Option<(String, String, usize)> {
-    if chars.first() != Some(&'[') {
-        return None;
+/// Pre-index delimiters once. Looking up an unmatched opening bracket or
+/// backtick must not repeatedly scan the remaining (possibly streaming) reply.
+struct Markers([Vec<usize>; 7]);
+
+impl Markers {
+    fn new(text: &str) -> Self {
+        let mut result = Self(std::array::from_fn(|_| Vec::new()));
+        let mut i = 0;
+        while i < text.len() {
+            let rest = &text[i..];
+            let ch = rest.chars().next().expect("valid character boundary");
+            if ch == '\\'
+                && let Some(next) = rest[1..].chars().next()
+                && next.is_ascii_punctuation()
+            {
+                i += 1 + next.len_utf8();
+                continue;
+            }
+            let (kind, length) = match ch {
+                '*' if rest.starts_with("**") => (Some(2), 2),
+                '_' if rest.starts_with("__") => (Some(3), 2),
+                '*' => (Some(0), 1),
+                '_' => (Some(1), 1),
+                '`' => (Some(4), 1),
+                ']' => (Some(5), 1),
+                ')' => (Some(6), 1),
+                _ => (None, ch.len_utf8()),
+            };
+            if let Some(kind) = kind {
+                result.0[kind].push(i);
+            }
+            i += length;
+        }
+        result
     }
-    let close = chars.iter().position(|c| *c == ']')?;
-    if chars.get(close + 1) != Some(&'(') {
-        return None;
+
+    fn next(&self, kind: usize, after: usize) -> Option<usize> {
+        let positions = &self.0[kind];
+        positions.get(positions.partition_point(|position| *position <= after)).copied()
     }
-    let paren = chars[close + 1..].iter().position(|c| *c == ')')?;
-    let label: String = chars[1..close].iter().collect();
-    let inside: String = chars[close + 2..close + 1 + paren].iter().collect();
-    let target = inside.split_whitespace().next().unwrap_or_default().trim_matches(['<', '>']).to_owned();
-    Some((label, target, close + paren + 2))
+
+    fn emphasis_end(&self, text: &str, start: usize, length: usize) -> Option<usize> {
+        let underscore = text.as_bytes()[start] == b'_';
+        if underscore && text[..start].chars().next_back().is_some_and(char::is_alphanumeric) {
+            return None;
+        }
+        let kind = usize::from(underscore) + if length == 2 { 2 } else { 0 };
+        let end = self.next(kind, start)?;
+        let body = &text[start + length..end];
+        (!body.is_empty() && !body.starts_with(char::is_whitespace) && !body.ends_with(char::is_whitespace))
+            .then_some(end)
+    }
 }
 
-/// A bare web address starting at `chars[i]`, as GitHub links them, without
-/// a sentence's closing punctuation.
-fn bare_url(chars: &[char], i: usize) -> Option<String> {
-    let rest: String = chars[i..].iter().take(8).collect();
-    let starts = rest.starts_with("https://") || rest.starts_with("http://");
-    if !starts || (i > 0 && chars[i - 1].is_alphanumeric()) {
+/// A simple inline link, returning borrowed label/destination and bytes used.
+fn markdown_link<'a>(text: &'a str, start: usize, markers: &Markers) -> Option<(&'a str, &'a str, usize)> {
+    let close = markers.next(5, start)?;
+    if text.as_bytes().get(close + 1) != Some(&b'(') {
         return None;
     }
-    let len =
-        chars[i..].iter().position(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"')).unwrap_or(chars.len() - i);
-    let mut url: String = chars[i..i + len].iter().collect();
-    while url.ends_with(['.', ',', ';', ':', '!', '?', ')']) {
-        url.pop();
+    let label = &text[start + 1..close];
+    if label.is_empty() || label.contains('[') {
+        return None;
+    }
+    let paren = markers.next(6, close)?;
+    let target = text[close + 2..paren].split_whitespace().next()?.trim_matches(['<', '>']);
+    if target.contains('(') || target.chars().any(char::is_control) || !web_url(target) {
+        return None;
+    }
+    Some((label, target, paren + 1 - start))
+}
+
+fn web_url(text: &str) -> bool {
+    text.get(..8).is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
+        || text.get(..7).is_some_and(|prefix| prefix.eq_ignore_ascii_case("http://"))
+}
+
+/// A bare web address without sentence punctuation. Balanced URL parentheses
+/// are retained, unlike a closing parenthesis around the whole address.
+fn bare_url(text: &str, i: usize) -> Option<&str> {
+    let rest = &text[i..];
+    if !web_url(rest) || text[..i].chars().next_back().is_some_and(char::is_alphanumeric) {
+        return None;
+    }
+    let len = rest.find(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"')).unwrap_or(rest.len());
+    let mut url = rest[..len].trim_end_matches(['.', ',', ';', ':', '!', '?']);
+    let opens = url.bytes().filter(|byte| *byte == b'(').count();
+    let mut closes = url.bytes().filter(|byte| *byte == b')').count();
+    while closes > opens && url.ends_with(')') {
+        url = &url[..url.len() - 1];
+        closes -= 1;
     }
     Some(url)
 }
@@ -321,5 +465,59 @@ mod tests {
         assert_eq!(numbered("12. Item"), Some(("12", "Item")));
         assert_eq!(bullet("- item"), Some("item"));
         assert!(is_rule("---") && !is_rule("--"));
+    }
+
+    #[test]
+    fn incomplete_markup_and_escaped_delimiters_remain_readable() {
+        let p = Palette::CARBON_COPPER;
+        for (source, expected) in [
+            ("**incomplete", "**incomplete"),
+            ("`unfinished", "`unfinished"),
+            ("[unfinished", "[unfinished"),
+            ("_italic_ and snake_case", "italic and snake_case"),
+            (r"\*literal\*", "*literal*"),
+            ("[bad](javascript:alert)", "[bad](javascript:alert)"),
+        ] {
+            assert_eq!(inline_job(source, &FontId::proportional(13.0), p.text, &p).text, expected);
+        }
+    }
+
+    #[test]
+    fn unicode_link_ranges_and_balanced_url_parentheses_are_correct() {
+        let p = Palette::CARBON_COPPER;
+        let (job, links) = inline_job_links(
+            "é [世界](https://example.org) (https://example.org/a_(b)).",
+            &FontId::proportional(13.0),
+            p.text,
+            &p,
+        );
+        assert_eq!(links[0].0, 2..4);
+        assert_eq!(links[1].1, "https://example.org/a_(b)");
+        assert_eq!(job.text, "é 世界 (https://example.org/a_(b)).");
+    }
+
+    #[test]
+    fn arbitrary_unicode_and_malformed_delimiters_keep_valid_ranges() {
+        let p = Palette::CARBON_COPPER;
+        let alphabet = ['[', ']', '(', ')', '*', '_', '`', '\\', 'é', '界', '🙂', '\n', ' ', 'a'];
+        let mut seed = 7_u64;
+        for length in 0..256 {
+            let text: String = (0..length)
+                .map(|_| {
+                    seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                    alphabet[(seed as usize) % alphabet.len()]
+                })
+                .collect();
+            let (job, links) = inline_job_links(&text, &FontId::proportional(13.0), p.text, &p);
+            for section in &job.sections {
+                assert!(job.text.get(section.byte_range.start.0..section.byte_range.end.0).is_some());
+            }
+            for (range, _) in links {
+                assert!(range.end <= job.text.chars().count());
+            }
+        }
+        // A regression for repeated unmatched openers: no suffix is rescanned.
+        let malformed = "[".repeat(50_000);
+        assert_eq!(inline_job(&malformed, &FontId::proportional(13.0), p.text, &p).text, malformed);
     }
 }

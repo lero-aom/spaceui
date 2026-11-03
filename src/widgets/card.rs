@@ -3,7 +3,7 @@ use crate::{Theme, paint, theme::semibold};
 use egui::{Color32, Frame, Painter, Rect, RichText, Shape, Stroke, StrokeKind, Ui};
 
 /// Paints the plate a card or column sits on: a gently graded panel, a
-/// hairline border and a faint top sheen. [`Shell`](crate::Shell) paints
+/// hairline border and a faint top sheen. The shell paints
 /// these for its main card and side column.
 pub fn plate(painter: &Painter, rect: Rect) {
     let theme = Theme::of(painter.ctx());
@@ -53,15 +53,15 @@ pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
 pub fn section(ui: &mut Ui, number: &str, title: &str) {
     let p = Theme::of(ui.ctx()).palette;
     ui.horizontal(|ui| {
-        ui.label(RichText::new(number).color(p.accent).size(11.0).strong());
-        ui.label(RichText::new(title).font(semibold(15.0)).color(p.text));
+        ui.label(RichText::new(number).color(p.accent).size(super::text_size(ui, 11.0)).strong());
+        ui.label(RichText::new(title).font(semibold(super::text_size(ui, 15.0))).color(p.text));
     });
 }
 
 /// Secondary explanatory text.
 pub fn caption(ui: &mut Ui, text: impl Into<String>) {
     let p = Theme::of(ui.ctx()).palette;
-    ui.label(RichText::new(text.into()).color(p.muted).size(12.0));
+    ui.label(RichText::new(text.into()).color(p.muted).size(super::text_size(ui, 12.0)));
 }
 
 /// A card with a caption, a large value in `tone` and a detail line.
@@ -69,7 +69,7 @@ pub fn metric(ui: &mut Ui, label: &str, value: &str, detail: &str, tone: Tone) {
     let p = Theme::of(ui.ctx()).palette;
     card(ui, |ui| {
         caption(ui, label);
-        ui.label(RichText::new(value).size(25.0).color(tone.color(&p)));
-        ui.label(RichText::new(detail).size(10.5).color(p.muted));
+        ui.label(RichText::new(value).size(super::text_size(ui, 25.0)).color(tone.color(&p)));
+        ui.label(RichText::new(detail).size(super::text_size(ui, 10.5)).color(p.muted));
     });
 }

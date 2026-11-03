@@ -1,0 +1,30 @@
+[package]
+name = "spaceui-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+spaceui = { path = "..", default-features = false, features = ["chat"] }
+
+# Keep the fuzzer's dependencies and lockfile out of the published crate.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "geometry"
+path = "fuzz_targets/geometry.rs"
+test = false
+doc = false
+bench = false
