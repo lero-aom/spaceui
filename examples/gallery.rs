@@ -6,13 +6,12 @@
 //! ```
 //!
 //! For a screenshot run, set `SPACEUI_SCREENSHOT=out.png`; `SPACEUI_THEME=deep_space`
-//! picks Probe's theme and `SPACEUI_PAGE=0..=3` the page.
+//! picks the Deep Space theme and `SPACEUI_PAGE=0..=3` the page.
 use spaceui::chat::{self, ChatLayout, Composer, Tab, TabAction, transcript};
 use spaceui::egui::{self, Color32, RichText, ScrollArea, UiBuilder, vec2};
 use spaceui::prelude::*;
 
-const ROVER: Svg = Svg::new("gallery/rover", include_str!("assets/rover.svg"));
-const PROBE: Svg = Svg::new("gallery/probe", include_str!("assets/probe.svg"));
+const LOGO: Svg = Svg::new("gallery/spaceui", include_str!("assets/spaceui.svg"));
 const HINT: &str = "Ask the gallery anything… (canned replies)";
 const PAGES: [&str; 4] = ["Overview", "Controls", "Palette and icons", "Settings"];
 const RAIL: &[RailItem] = &[
@@ -27,7 +26,7 @@ const EFFORTS: [&str; 5] = ["Low", "Medium", "High", "Extra high", "Max"];
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: window::viewport("SpaceUI Gallery", "spaceui-gallery")
-            .with_icon(ROVER.window_icon(256).unwrap_or_default()),
+            .with_icon(LOGO.window_icon(256).unwrap_or_default()),
         ..Default::default()
     };
     eframe::run_native("SpaceUI Gallery", options, Box::new(|cc| Ok(Box::new(Gallery::new(cc)))))
@@ -92,7 +91,7 @@ impl Gallery {
         welcome.entries = vec![
             Entry::User("What is SpaceUI?".into()),
             Entry::Reply {
-                text: "**SpaceUI** is the design system behind *Rover* and *Probe*:\n\n\
+                text: "**SpaceUI** is a design system for *egui* desktop apps:\n\n\
                        - a `Theme` of semantic colours, metrics and fonts\n\
                        - anti-aliased painting and vector icons\n\
                        - widgets, the window shell and this chat kit\n\n\
@@ -119,10 +118,6 @@ impl Gallery {
             search: String::new(),
             screenshot: window::Screenshot::from_env("SPACEUI_SCREENSHOT"),
         }
-    }
-
-    fn logo(&self) -> Svg {
-        if self.deep_space { PROBE } else { ROVER }
     }
 
     fn page(&mut self, ui: &mut egui::Ui) {
@@ -236,7 +231,7 @@ impl Gallery {
     }
 
     fn chat_column(&mut self, ui: &mut egui::Ui, column: egui::Rect) {
-        let logo = self.logo();
+        let logo = LOGO;
         let draft = &self.chats[self.active].draft;
         let layout = ChatLayout::new(column, Composer::measure(ui, column.width() - 24.0, draft, HINT));
 
@@ -407,7 +402,7 @@ impl eframe::App for Gallery {
         let theme_name = Theme::of(&ctx).name;
         let mut toggle = false;
         let regions = Shell::new("SpaceUI")
-            .logo(self.logo())
+            .logo(LOGO)
             .rail(RAIL)
             .side_column(&mut self.side, 330.0..=600.0)
             .status_bar(22.0)

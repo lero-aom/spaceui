@@ -8,12 +8,12 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - 2026-11-03
 
-First release, extracted from Rover and Probe.
+First release.
 
 ### Added
 
 - `theme`: `Theme`, `Palette`, `Metrics` and `Backdrop`; the Carbon / Copper
-  (Rover) and Deep Space (Probe) themes; Segoe UI fonts; egui visuals.
+  and Deep Space themes; Segoe UI fonts; egui visuals.
 - `paint`: anti-aliased gradients, polygon fills, glows and a sparkle glyph.
 - `art`: 70 built-in line icons and app SVGs, rasterized at exact pixel sizes,
   with window icons.

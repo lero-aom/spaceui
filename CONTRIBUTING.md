@@ -51,3 +51,4 @@ If an icon comes from a third-party set, record its license in `NOTICE.md`.
 2. `cargo package` and inspect the file list.
 3. Tag the release (`git tag v0.1.0 && git push --tags`), then `cargo publish`. crates.io shows the README's
    screenshots from this repository, so it must be public by then.
+4. After the first release, add the crates.io and docs.rs badges to the README and point the module table at docs.rs.

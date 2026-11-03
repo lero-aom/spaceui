@@ -1,5 +1,4 @@
-//! Building blocks for a chat column like Rover's assistant and Probe's
-//! agent chat.
+//! Building blocks for an assistant chat column.
 //!
 //! The app owns its conversations, models and backends; these pieces lay out
 //! and draw:

@@ -83,7 +83,7 @@ mod tests {
     fn the_semibold_family_exists_without_system_fonts() {
         let fonts = definitions(Path::new("no such folder"));
         let family = &fonts.families[&FontFamily::Name(SEMIBOLD.into())];
-        assert!(!family.is_empty());
+        assert_ne!(family.as_slice(), [] as [String; 0], "the family has fonts");
         assert!(family.iter().all(|key| fonts.font_data.contains_key(key)));
     }
 }

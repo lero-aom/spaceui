@@ -59,7 +59,7 @@ pub struct Palette {
 }
 
 impl Palette {
-    /// Rover: near-black carbon with brushed-copper accents.
+    /// Near-black carbon with brushed-copper accents.
     pub const CARBON_COPPER: Palette = Palette {
         bg_top: Color32::from_rgb(19, 19, 22),
         bg_bottom: Color32::from_rgb(12, 12, 14),
@@ -84,7 +84,7 @@ impl Palette {
         bubble: Color32::from_rgb(52, 40, 32),
     };
 
-    /// Probe: deep-space indigo with violet accents.
+    /// Deep-space indigo with violet accents.
     pub const DEEP_SPACE: Palette = Palette {
         bg_top: Color32::from_rgb(15, 12, 38),
         bg_bottom: Color32::from_rgb(8, 7, 22),

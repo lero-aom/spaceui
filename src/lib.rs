@@ -1,8 +1,8 @@
 //! A design system for [egui] desktop apps.
 //!
-//! SpaceUI is the look and window shell that Rover and Probe share: dark,
+//! SpaceUI gives an egui app a complete, consistent look and window: dark,
 //! card-based layouts with an accent colour, an icon rail, a custom title bar
-//! and a chat column, packaged so the next app starts from the same parts.
+//! and a chat column, built from small parts you can also use on their own.
 //!
 //! - **One theme, everywhere.** A [`Theme`] (a semantic [`Palette`],
 //!   [`Metrics`], fonts and a [`Backdrop`]) is installed once per context;
@@ -89,9 +89,9 @@
 //!
 //! # Themes
 //!
-//! Two themes ship: [`Theme::carbon_copper`] (Rover: near-black carbon with
-//! copper accents) and [`Theme::deep_space`] (Probe: indigo with violet
-//! accents). A theme is plain data, so a new one is a struct literal; see
+//! Two themes ship: [`Theme::carbon_copper`] (near-black carbon with copper
+//! accents) and [`Theme::deep_space`] (indigo with violet accents and a
+//! starfield). A theme is plain data, so a new one is a struct literal; see
 //! [`Theme`]. Installing another theme restyles the app on the next frame.
 //!
 //! # Platform support

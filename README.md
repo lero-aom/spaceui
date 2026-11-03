@@ -1,22 +1,19 @@
 # SpaceUI
 
 [![CI](https://github.com/lero-aom/spaceui/actions/workflows/ci.yml/badge.svg)](https://github.com/lero-aom/spaceui/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/spaceui.svg)](https://crates.io/crates/spaceui)
-[![Documentation](https://docs.rs/spaceui/badge.svg)](https://docs.rs/spaceui)
 [![MSRV](https://img.shields.io/badge/MSRV-1.95-blue.svg)](#minimum-supported-rust-version)
-[![License](https://img.shields.io/crates/l/spaceui.svg)](#license)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 A design system for [egui](https://github.com/emilk/egui) desktop apps: themes, anti-aliased painting, vector icons,
-widgets, a custom-window shell and a chat kit. SpaceUI was extracted from **Rover** (a trading workspace) and **Probe**
-(an AI-driven browser), so new apps start from the same parts.
+widgets, a custom-window shell and a chat kit. Install a theme, show the shell and fill its regions; every part also
+works on its own.
 
 ![The gallery in the Carbon / Copper theme](docs/screenshots/carbon-copper.png)
 
 ## Highlights
 
 - **One theme, everywhere.** A `Theme` is a semantic `Palette`, `Metrics`, fonts and a `Backdrop`. Install it once;
-  every widget reads it back, so nothing hard-codes a colour. Two ship: *Carbon / Copper* (Rover) and *Deep Space*
-  (Probe).
+  every widget reads it back, so nothing hard-codes a colour. Two ship: *Carbon / Copper* and *Deep Space*.
 - **Smooth at any scale.** Gradients and fills get the same one-pixel feathered edge egui gives its own shapes. Icons
   and logos stay SVG and are rasterized at the exact pixel size they're drawn at.
 - **A whole window.** Your own title bar (usable even above modal dialogs), an icon rail, a carded main panel, a
@@ -110,17 +107,18 @@ cargo run --example gallery
 
 ## Organisation
 
-The modules build on each other, from colours to whole windows:
+The modules build on each other, from colours to whole windows. `cargo doc --open` shows the full API with examples.
+
 
 | Module | Holds |
 |---|---|
-| [`theme`](https://docs.rs/spaceui/latest/spaceui/theme/) | `Theme`, `Palette`, `Metrics`, `Backdrop` and the fonts (`regular`, `semibold`, `mono`) |
-| [`paint`](https://docs.rs/spaceui/latest/spaceui/paint/) | Anti-aliased gradients, polygon fills, glows and a sparkle glyph |
-| [`art`](https://docs.rs/spaceui/latest/spaceui/art/) | The built-in `Icon` set (70 line icons) and your own `Svg` art, with window icons |
-| [`widgets`](https://docs.rs/spaceui/latest/spaceui/widgets/) | Buttons, pills, badges, chips, tabs, segmented controls, cards, metrics, a switch, a field and a slider |
-| [`shell`](https://docs.rs/spaceui/latest/spaceui/shell/) | The `Shell` builder, `RailItem` and the `Regions` it returns |
-| [`chat`](https://docs.rs/spaceui/latest/spaceui/chat/) | `ChatLayout`, `tab_strip`, transcript pieces, `Composer` and a Markdown renderer |
-| [`window`](https://docs.rs/spaceui/latest/spaceui/window/) | An undecorated viewport, rounded corners on Windows 11 and screenshot runs |
+| [`theme`](src/theme/mod.rs) | `Theme`, `Palette`, `Metrics`, `Backdrop` and the fonts (`regular`, `semibold`, `mono`) |
+| [`paint`](src/paint.rs) | Anti-aliased gradients, polygon fills, glows and a sparkle glyph |
+| [`art`](src/art/mod.rs) | The built-in `Icon` set (70 line icons) and your own `Svg` art, with window icons |
+| [`widgets`](src/widgets/mod.rs) | Buttons, pills, badges, chips, tabs, segmented controls, cards, metrics, a switch, a field and a slider |
+| [`shell`](src/shell/mod.rs) | The `Shell` builder, `RailItem` and the `Regions` it returns |
+| [`chat`](src/chat/mod.rs) | `ChatLayout`, `tab_strip`, transcript pieces, `Composer` and a Markdown renderer |
+| [`window`](src/window.rs) | An undecorated viewport, rounded corners on Windows 11 and screenshot runs |
 
 ## Your own theme
 
@@ -180,12 +178,8 @@ an icon.
 
 ## License
 
-Licensed under either of
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
-
-at your option. Third-party notices are in [NOTICE.md](NOTICE.md).
+SpaceUI is licensed under the [Apache License, Version 2.0](LICENSE). Third-party notices are in
+[NOTICE.md](NOTICE.md).
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in SpaceUI by you, as
-defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+defined in the Apache-2.0 license, shall be licensed as above, without any additional terms or conditions.

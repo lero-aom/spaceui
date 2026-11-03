@@ -121,7 +121,7 @@ impl Default for Theme {
 }
 
 impl Theme {
-    /// Rover's look: near-black carbon with a faint weave and copper accents.
+    /// Near-black carbon with a faint weave and copper accents.
     #[must_use]
     pub fn carbon_copper() -> Self {
         Self {
@@ -132,7 +132,7 @@ impl Theme {
         }
     }
 
-    /// Probe's look: deep-space indigo with violet accents and a starfield.
+    /// Deep-space indigo with violet accents and a starfield.
     #[must_use]
     pub fn deep_space() -> Self {
         Self {

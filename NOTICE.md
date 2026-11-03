@@ -32,8 +32,3 @@ SOFTWARE.
 
 SpaceUI does not ship fonts. On Windows it reads the system's Segoe UI family
 at runtime; elsewhere it uses the fonts bundled with egui.
-
-## Example logos
-
-`examples/assets/rover.svg` and `examples/assets/probe.svg` are the Rover and
-Probe logos, used by the gallery example only.

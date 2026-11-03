@@ -1,4 +1,4 @@
-//! A theme of your own: Probe's metrics and surfaces with an icy blue accent
+//! A theme of your own: Deep Space's metrics and surfaces with an icy blue accent
 //! and a plain backdrop. Every widget follows it without further changes.
 //!
 //! ```text
@@ -35,7 +35,7 @@ impl eframe::App for App {
         let regions = Shell::new("Arctic").logo(Icon::Orbit.svg()).rail(RAIL).show(ui, &mut self.page);
         ui.scope_builder(egui::UiBuilder::new().max_rect(regions.main), |ui| {
             ui.heading("A custom theme");
-            widgets::caption(ui, "Probe's surfaces and metrics, an icy accent and a plain backdrop.");
+            widgets::caption(ui, "Deep Space's surfaces and metrics, an icy accent and a plain backdrop.");
             ui.add_space(12.0);
             widgets::card(ui, |ui| {
                 ui.horizontal(|ui| {
