@@ -6,6 +6,7 @@ rust-version = "1.95"
 description = "A design system for egui desktop apps: themes, anti-aliased painting, vector icons, widgets, a custom-window shell and a chat kit"
 license = "Apache-2.0"
 repository = "https://github.com/lero-aom/spaceui"
+documentation = "https://docs.rs/spaceui"
 readme = "README.md"
 keywords = ["egui", "gui", "design-system", "theme", "widgets"]
 categories = ["gui"]

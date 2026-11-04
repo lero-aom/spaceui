@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish the selected version tag after verification (requires trusted publisher setup)
+        description: Publish an existing crate's version tag (first publication uses cargo login locally)
         type: boolean
         default: false
 
@@ -31,6 +31,27 @@ jobs:
         run: python .github/scripts/check_release_tag.py
       - run: cargo package --locked --list
       - run: cargo publish --locked --dry-run
+      - name: Verify documentation and examples from the packaged sources
+        shell: python
+        env:
+          RUSTDOCFLAGS: -D warnings
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+        run: |
+          from pathlib import Path
+          import subprocess
+          import tomllib
+
+          package = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))["package"]
+          manifest = Path("target/package") / f"{package['name']}-{package['version']}" / "Cargo.toml"
+          for command in [
+              ["doc", "--no-deps"],
+              ["check", "--examples"],
+              ["test", "--doc"],
+          ]:
+              subprocess.run(
+                  ["cargo", *command, "--locked", "--all-features", "--manifest-path", str(manifest)],
+                  check=True,
+              )
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-package
