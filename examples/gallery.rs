@@ -184,7 +184,7 @@ impl Gallery {
             widgets::card(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    widgets::section(ui, "01", "Explore the northern sky");
+                    section_heading(ui, "Explore the northern sky");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         widgets::segmented(ui, &mut self.timeframe, &["Wide", "Field", "Detail"]);
                     });
@@ -197,7 +197,7 @@ impl Gallery {
         } else if self.tab == 1 {
             widgets::card(ui, |ui| {
                 ui.set_width(ui.available_width());
-                widgets::section(ui, "01", "Deep-sky targets");
+                section_heading(ui, "Deep-sky targets");
                 for (index, (catalogue, name, kind, exposure)) in TARGETS.iter().enumerate() {
                     ui.horizontal(|ui| {
                         if ui.selectable_label(self.target == index, *catalogue).clicked() {
@@ -215,7 +215,7 @@ impl Gallery {
         } else {
             widgets::card(ui, |ui| {
                 ui.set_width(ui.available_width());
-                widgets::section(ui, "01", "An evening under the stars");
+                section_heading(ui, "An evening under the stars");
                 chat::markdown::render(
                     ui,
                     "### Before the first exposure\n- Check polar alignment and focus.\n- Start with **M31**, then revisit focus before moving to a star cluster.\n- Save calibration frames with the session.\n\nThese are sample observing notes; the sky map and conditions are illustrative.",
@@ -229,7 +229,7 @@ impl Gallery {
         widgets::card(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                widgets::section(ui, "02", name);
+                section_heading(ui, name);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     widgets::chip(ui, catalogue, Tone::Accent);
                 });
@@ -254,7 +254,7 @@ impl Gallery {
         ui.columns(2, |columns| {
             widgets::card(&mut columns[0], |ui| {
                 ui.set_width(ui.available_width());
-                widgets::section(ui, "01", "Mount and camera");
+                section_heading(ui, "Mount and camera");
                 ui.horizontal(|ui| {
                     if widgets::primary(ui, if self.switch { "Pause tracking" } else { "Start tracking" }).clicked() {
                         self.switch = !self.switch;
@@ -275,7 +275,7 @@ impl Gallery {
                     }
                 });
                 ui.add_space(8.0);
-                widgets::section(ui, "02", "Session conditions");
+                section_heading(ui, "Session conditions");
                 ui.horizontal(|ui| {
                     widgets::badge(ui, Icon::Star, "Clear sky", Tone::Positive);
                     widgets::pill(ui, Some(Tone::Warning), "Dew watch");
@@ -297,7 +297,7 @@ impl Gallery {
             });
             widgets::card(&mut columns[1], |ui| {
                 ui.set_width(ui.available_width());
-                widgets::section(ui, "03", "Capture sequence");
+                section_heading(ui, "Capture sequence");
                 widgets::text_field(ui, &mut self.search, "Search nebulae, galaxies or clusters…")
                     .accessible_name("Target search");
                 ui.horizontal(|ui| {
@@ -311,7 +311,7 @@ impl Gallery {
                     ui.label(EXPOSURES[self.exposure]);
                 });
                 ui.add_space(8.0);
-                widgets::section(ui, "04", "Imaging workflow");
+                section_heading(ui, "Imaging workflow");
                 widgets::tabs(ui, &mut self.capture_mode, &["Capture", "Calibration", "Review"]);
                 widgets::segmented(ui, &mut self.filter, &FILTERS);
                 ui.add_space(8.0);
@@ -323,13 +323,13 @@ impl Gallery {
     fn settings(&mut self, ui: &mut egui::Ui) {
         widgets::card(ui, |ui| {
             ui.set_width(ui.available_width());
-            widgets::section(ui, "01", "Theme");
+            section_heading(ui, "Theme");
             let mut choice = usize::from(self.deep_space);
             widgets::segmented(ui, &mut choice, &["Carbon / Copper", "Deep Space"]);
             self.deep_space = choice == 1;
             widgets::caption(ui, "Installing a theme restyles every widget on the next frame.");
             ui.add_space(10.0);
-            widgets::section(ui, "02", "Chat column");
+            section_heading(ui, "Chat column");
             widgets::segmented(ui, &mut self.chat_side, &["Left", "Right"]);
             widgets::caption(
                 ui,
@@ -507,6 +507,14 @@ fn show_entry(ui: &mut egui::Ui, entry: &mut Entry, logo: Svg) {
     }
 }
 
+fn section_heading(ui: &mut egui::Ui, title: &str) {
+    let palette = Theme::of(ui.ctx()).palette;
+    let size = egui::TextStyle::Body.resolve(ui.style()).size * (15.0 / 14.0);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(title).font(semibold(size)).color(palette.text));
+    });
+}
+
 fn palette_and_icons(ui: &mut egui::Ui) {
     let p = Theme::of(ui.ctx()).palette;
     let roles = [
@@ -529,7 +537,7 @@ fn palette_and_icons(ui: &mut egui::Ui) {
     ];
     widgets::card(ui, |ui| {
         ui.set_width(ui.available_width());
-        widgets::section(ui, "01", "Palette roles");
+        section_heading(ui, "Palette roles");
         rows(ui, &roles, 84.0, |ui, (name, color)| {
             ui.vertical(|ui| {
                 let (swatch, _) = ui.allocate_exact_size(vec2(84.0, 40.0), egui::Sense::hover());
@@ -545,7 +553,7 @@ fn palette_and_icons(ui: &mut egui::Ui) {
     ui.add_space(12.0);
     widgets::card(ui, |ui| {
         ui.set_width(ui.available_width());
-        widgets::section(ui, "02", &format!("Icons · {}", Icon::ALL.len()));
+        section_heading(ui, &format!("Icons · {}", Icon::ALL.len()));
         rows(ui, Icon::ALL, 40.0, |ui, icon| {
             let (cell, response) = ui.allocate_exact_size(vec2(40.0, 40.0), egui::Sense::hover());
             response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, ui.is_enabled(), icon.name()));
