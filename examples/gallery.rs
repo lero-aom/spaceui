@@ -27,6 +27,8 @@ const RAIL: &[RailItem] = &[
 ];
 const EFFORTS: [&str; 5] = ["Low", "Medium", "High", "Extra high", "Max"];
 const EXPOSURES: [&str; 5] = ["15 s", "30 s", "60 s", "120 s", "300 s"];
+const FILTERS: [&str; 4] = ["Luminance", "Red", "Green", "Blue"];
+const STATUS_HEIGHT: f32 = 26.0;
 const TARGETS: [(&str, &str, &str, &str); 4] = [
     ("M31", "Andromeda Galaxy", "Galaxy · Andromeda", "60 × 120 s · LRGB"),
     ("M45", "The Pleiades", "Open cluster · Taurus", "40 × 90 s · RGB"),
@@ -311,7 +313,7 @@ impl Gallery {
                 ui.add_space(8.0);
                 widgets::section(ui, "04", "Imaging workflow");
                 widgets::tabs(ui, &mut self.capture_mode, &["Capture", "Calibration", "Review"]);
-                widgets::segmented(ui, &mut self.filter, &["Luminance", "Red", "Green", "Blue"]);
+                widgets::segmented(ui, &mut self.filter, &FILTERS);
                 ui.add_space(8.0);
                 widgets::caption(ui, "Choose a filter and exposure for your sample sequence.");
             });
@@ -334,6 +336,57 @@ impl Gallery {
                 "The shell takes columns on either side, or both; the chat kit draws into any rectangle.",
             );
         });
+    }
+
+    fn status_bar(&self, ui: &mut egui::Ui, region: egui::Rect) {
+        let palette = Theme::of(ui.ctx()).palette;
+        // The shell's region includes the gap above the bar; leave that clear.
+        let bar = egui::Rect::from_min_max(
+            egui::pos2(region.left(), (region.bottom() - STATUS_HEIGHT).max(region.top())),
+            region.max,
+        );
+        let painter = ui.painter_at(bar);
+        painter.rect_filled(bar, 0.0, palette.panel);
+        painter.hline(bar.x_range(), bar.top(), egui::Stroke::new(1.0, palette.border));
+
+        let badge = egui::Rect::from_min_size(bar.min, vec2(34.0, bar.height()));
+        painter.rect_filled(badge, 0.0, palette.accent);
+        Icon::Orbit.paint(
+            &painter,
+            egui::Rect::from_center_size(badge.center(), egui::Vec2::splat(15.0)),
+            palette.on_accent,
+        );
+        let content = egui::Rect::from_min_max(
+            egui::pos2(badge.right() + 12.0, bar.top()),
+            egui::pos2(bar.right() - 12.0, bar.bottom()),
+        );
+        ui.scope_builder(
+            UiBuilder::new()
+                .id_salt("observatory-status")
+                .max_rect(content)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+            |ui| {
+                ui.spacing_mut().item_spacing.x = 10.0;
+                ui.label(RichText::new("Evening session").size(11.5).color(palette.text_2))
+                    .on_hover_text("Illustrative sky and conditions. This session does not connect to equipment.");
+                if bar.width() >= 600.0 {
+                    status_divider(ui);
+                    let count = self.queued.iter().filter(|queued| **queued).count();
+                    status_item(ui, Icon::Star, &format!("{count} targets in plan"));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if bar.width() >= 800.0 {
+                        status_item(
+                            ui,
+                            Icon::Camera,
+                            &format!("{} · {}", FILTERS[self.filter], EXPOSURES[self.exposure]),
+                        );
+                        status_divider(ui);
+                    }
+                    status_item(ui, Icon::Link, "Mount disconnected");
+                });
+            },
+        );
     }
 
     fn chat_column(&mut self, ui: &mut egui::Ui, column: egui::Rect) {
@@ -409,6 +462,25 @@ impl Gallery {
             chat.send();
         }
     }
+}
+
+fn status_item(ui: &mut egui::Ui, icon: Icon, text: &str) {
+    let palette = Theme::of(ui.ctx()).palette;
+    let right_to_left = ui.layout().main_dir() == egui::Direction::RightToLeft;
+    if right_to_left {
+        ui.label(RichText::new(text).size(11.5).color(palette.text_2));
+    }
+    let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(13.0), egui::Sense::hover());
+    icon.paint(ui.painter(), rect, palette.text_2);
+    if !right_to_left {
+        ui.label(RichText::new(text).size(11.5).color(palette.text_2));
+    }
+}
+
+fn status_divider(ui: &mut egui::Ui) {
+    let (rect, _) = ui.allocate_exact_size(vec2(1.0, 12.0), egui::Sense::hover());
+    let border = Theme::of(ui.ctx()).palette.border;
+    ui.painter().vline(rect.center().x, rect.y_range(), egui::Stroke::new(1.0, border));
 }
 
 fn show_entry(ui: &mut egui::Ui, entry: &mut Entry, logo: Svg) {
@@ -510,7 +582,7 @@ impl eframe::App for Gallery {
         }
         let theme_name = Theme::of(&ctx).name;
         let mut toggle = false;
-        let shell = Shell::new("Observatory").logo(LOGO).rail(RAIL).status_bar(22.0).title_status(|ui| {
+        let shell = Shell::new("Observatory").logo(LOGO).rail(RAIL).status_bar(STATUS_HEIGHT).title_status(|ui| {
             toggle = widgets::pill(ui, Some(Tone::Accent), theme_name).on_hover_text("Switch theme").clicked();
             widgets::badge(ui, Icon::Star, "Demo session", Tone::Positive);
         });
@@ -535,10 +607,7 @@ impl eframe::App for Gallery {
             self.chat_column(ui, column);
         }
         if let Some(status) = regions.status {
-            let muted = Theme::of(&ctx).palette.muted;
-            let font = egui::FontId::proportional(11.0);
-            let text = "OBSERVATORY  /  SpaceUI example  ·  Illustrative sky and conditions  ·  No equipment connected";
-            ui.painter().text(status.left_center(), egui::Align2::LEFT_CENTER, text, font, muted);
+            self.status_bar(ui, status);
         }
         if let Some(shot) = &mut self.screenshot
             && let Some(Err(error)) = shot.update(&ctx)
