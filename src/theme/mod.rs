@@ -22,7 +22,7 @@ pub use palette::Palette;
 use egui::{Color32, Context, CornerRadius, Id, Stroke, TextStyle, Visuals, epaint::Shadow, vec2};
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 struct MotionStyle {
     animation_time: f32,
     scroll_animation: egui::style::ScrollAnimation,
@@ -31,11 +31,13 @@ struct MotionStyle {
 /// Disable decorative motion and egui transitions in this context.
 /// Call after installing a theme. Disabling the preference restores the
 /// transition and programmatic-scroll settings active before it was enabled.
-/// Repeated calls preserve the original settings for both light and dark mode. Applications
+/// Repeated calls preserve the original settings for both light and dark mode and
+/// request a repaint only when the motion settings change. Applications
 /// can connect this to an OS preference or an in-app accessibility setting.
 pub fn set_reduced_motion(ctx: &Context, reduced: bool) {
     let id = Id::unique("spaceui-animation-duration");
     let modes = [egui::Theme::Dark, egui::Theme::Light];
+    let mut changed = false;
     if reduced {
         let current = modes.map(|mode| {
             let style = ctx.style_of(mode);
@@ -46,19 +48,28 @@ pub fn set_reduced_motion(ctx: &Context, reduced: bool) {
                 d.insert_temp(id, current);
             }
         });
-        ctx.all_styles_mut(|style| {
-            style.animation_time = 0.0;
-            style.scroll_animation = egui::style::ScrollAnimation::none();
-        });
+        let disabled = MotionStyle { animation_time: 0.0, scroll_animation: egui::style::ScrollAnimation::none() };
+        changed = current.iter().any(|style| *style != disabled);
+        if changed {
+            ctx.all_styles_mut(|style| {
+                style.animation_time = disabled.animation_time;
+                style.scroll_animation = disabled.scroll_animation;
+            });
+        }
     } else if let Some(settings) = ctx.data_mut(|d| d.remove_temp::<[MotionStyle; 2]>(id)) {
         for (mode, saved) in modes.into_iter().zip(settings) {
             ctx.style_mut_of(mode, |style| {
+                let current =
+                    MotionStyle { animation_time: style.animation_time, scroll_animation: style.scroll_animation };
+                changed |= current != saved;
                 style.animation_time = saved.animation_time;
                 style.scroll_animation = saved.scroll_animation;
             });
         }
     }
-    ctx.request_repaint();
+    if changed {
+        ctx.request_repaint();
+    }
 }
 
 /// Sizes the shell and widgets share, in points.
@@ -299,6 +310,22 @@ impl Theme {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repeating_motion_preferences_does_not_keep_requesting_frames() {
+        let ctx = Context::default();
+        for reduced in [false, true, false] {
+            for _ in 0..4 {
+                ctx.run_ui(egui::RawInput::default(), |_| set_reduced_motion(&ctx, reduced))
+                    .drop_without_applying_deltas();
+            }
+            let output = ctx.run_ui(egui::RawInput::default(), |_| set_reduced_motion(&ctx, reduced));
+            assert_ne!(output.viewport_output[&egui::ViewportId::ROOT].repaint_delay, std::time::Duration::ZERO);
+            output.drop_without_applying_deltas();
+        }
+        set_reduced_motion(&ctx, true);
+        assert!(ctx.has_requested_repaint(), "a changed preference still wakes the UI");
+    }
 
     #[test]
     fn reduced_motion_restores_the_callers_duration() {

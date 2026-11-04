@@ -58,6 +58,27 @@ font clones also share their immutable bytes; unit tests verify that installatio
 and cloning retain the same backing allocation. Cache retention and clearing
 matched the initial measurement.
 
+## Token-boundary correctness follow-up
+
+Measured again on 2026-11-04, Windows, Rust 1.97.1, optimized bench profile with the same workloads.
+The existing pre-change allocation executable was run immediately before rebuilding the fixes.
+Cached SVG/button allocation counts and cache retention were unchanged. The 100-paragraph parser
+changed from 8 allocations, 38 reallocations and 79,912 requested bytes per operation to 9 allocations,
+43 reallocations and 81,960 bytes. The additional temporary vector records code/link token ranges so
+their contents cannot incorrectly close emphasis. Inputs without emphasis markers skip this pass.
+
+The post-change timing smoke run reported the following values. These are single-run observations,
+not a controlled speed comparison with the earlier baseline:
+
+| CPU workload | Median | p95 |
+|---|---:|---:|
+| 100 rows of three controls | 2,929.2 us | 4,426.4 us |
+| 100-message Markdown frame | 610.1 us | 898.0 us |
+| 16 KiB of unmatched opening brackets | 168.0 us | 202.7 us |
+| SVG rasterization, 64 pixels | 53.2 us | 78.2 us |
+| Cached SVG frame | 3.4 us | 3.6 us |
+| Gradient mesh, 2x pixel density | 5.3 us | 5.8 us |
+
 ## Compare changes
 
 Use the same toolchain, hardware, feature set and workload before and after a

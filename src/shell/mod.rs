@@ -302,9 +302,8 @@ impl<'a> Shell<'a> {
         let left = self.left.map(|(width, range)| {
             let (min, max) = limits(&range, cap);
             *width = finite_size(*width).clamp(min, max);
-            let column = Rect::from_min_max(pos2(left_edge, top), pos2(left_edge + *width, bottom));
-            left_edge = column.right() + gutter;
-            let handle = Rect::from_min_max(pos2(column.right(), top + 20.0), pos2(left_edge, bottom - 20.0));
+            let edge = left_edge + *width;
+            let handle = Rect::from_min_max(pos2(edge, top + 20.0), pos2(edge + gutter, bottom - 20.0));
             splitter::show(
                 ui,
                 handle,
@@ -314,14 +313,17 @@ impl<'a> Shell<'a> {
                 self.labels.left_column_width,
                 self.enabled,
             );
+            // Input can change the width in this frame. Return and paint the
+            // same geometry represented by the caller's updated state.
+            let column = Rect::from_min_max(pos2(left_edge, top), pos2(left_edge + *width, bottom));
+            left_edge = column.right() + gutter;
             column
         });
         let right = self.right.map(|(width, range)| {
             let (min, max) = limits(&range, cap);
             *width = finite_size(*width).clamp(min, max);
-            let column = Rect::from_min_max(pos2(right_edge - *width, top), pos2(right_edge, bottom));
-            right_edge = column.left() - gutter;
-            let handle = Rect::from_min_max(pos2(right_edge, top + 20.0), pos2(column.left(), bottom - 20.0));
+            let edge = right_edge - *width;
+            let handle = Rect::from_min_max(pos2(edge - gutter, top + 20.0), pos2(edge, bottom - 20.0));
             splitter::show(
                 ui,
                 handle,
@@ -331,6 +333,8 @@ impl<'a> Shell<'a> {
                 self.labels.right_column_width,
                 self.enabled,
             );
+            let column = Rect::from_min_max(pos2(right_edge - *width, top), pos2(right_edge, bottom));
+            right_edge = column.left() - gutter;
             column
         });
 

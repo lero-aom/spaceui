@@ -91,7 +91,16 @@ pub fn polygon_mesh(points: &[Pos2], feather: f32, color_at: impl Fn(Pos2) -> Co
         }
         return polygon_mesh(&clean, feather, color_at);
     }
-    let area: f32 = (0..n).map(|i| points[i].x * points[(i + 1) % n].y - points[(i + 1) % n].x * points[i].y).sum();
+    // Translate before multiplying: absolute coordinates can cancel away the
+    // area of small polygons far from the origin, even at ordinary UI sizes.
+    let origin = points[0];
+    let area: f32 = (0..n)
+        .map(|i| {
+            let a = points[i] - origin;
+            let b = points[(i + 1) % n] - origin;
+            a.x * b.y - b.x * a.y
+        })
+        .sum();
     if !area.is_finite() || area.abs() < 1e-12 {
         return mesh;
     }
@@ -152,13 +161,15 @@ pub fn gradient_h(painter: &Painter, rect: Rect, left: Color32, right: Color32, 
 }
 
 /// A soft disc fading from `color` at `alpha` in the centre to nothing.
+/// `alpha` replaces the colour's opacity while preserving its unmultiplied RGB.
 /// Non-finite/overflowing geometry or a non-positive radius paints nothing.
 pub fn radial_glow(painter: &Painter, center: Pos2, radius: f32, color: Color32, alpha: u8) {
     const SEGMENTS: u32 = 48;
     if !center.is_finite() || !radius.is_finite() || radius <= 0.0 {
         return;
     }
-    let inner = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha);
+    let [red, green, blue, _] = color.to_srgba_unmultiplied();
+    let inner = Color32::from_rgba_unmultiplied(red, green, blue, alpha);
     let mut mesh = Mesh::default();
     mesh.colored_vertex(center, inner);
     for i in 0..SEGMENTS {
@@ -257,6 +268,44 @@ mod tests {
     #[test]
     fn degenerate_polygons_paint_nothing() {
         assert!(polygon_mesh(&[pos2(0.0, 0.0), pos2(1.0, 1.0)], 1.0, |_| Color32::WHITE).is_empty());
+    }
+
+    #[test]
+    fn translating_small_polygons_preserves_their_fill_and_winding() {
+        let square = [pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0)];
+        let original = polygon_mesh(&square, 1.0, |_| Color32::WHITE);
+        for translation in [Vec2::splat(10_000.0), Vec2::splat(-10_000.0)] {
+            for clockwise in [true, false] {
+                let mut points = square.map(|point| point + translation);
+                if !clockwise {
+                    points.reverse();
+                }
+                let mesh = polygon_mesh(&points, 1.0, |_| Color32::WHITE);
+                assert_eq!(mesh.vertices.len(), original.vertices.len());
+                assert_eq!(mesh.indices.len(), original.indices.len());
+                for pair in mesh.vertices[1..].chunks_exact(2) {
+                    let inner = pair[0].pos - translation;
+                    let outer = pair[1].pos - translation;
+                    assert!((inner - pos2(0.5, 0.5)).length() < (outer - pos2(0.5, 0.5)).length());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn radial_glow_does_not_apply_input_alpha_twice() {
+        let ctx = egui::Context::default();
+        let color = Color32::from_rgba_unmultiplied(255, 0, 0, 128);
+        let painter = ctx.layer_painter(egui::LayerId::background());
+        ctx.begin_pass(egui::RawInput::default());
+        radial_glow(&painter, pos2(50.0, 50.0), 10.0, color, 128);
+        let output = ctx.end_pass();
+        let center = output.shapes.iter().find_map(|clipped| match &clipped.shape {
+            egui::Shape::Mesh(mesh) => Some(mesh.vertices[0].color),
+            _ => None,
+        });
+        assert_eq!(center, Some(color));
+        output.drop_without_applying_deltas();
     }
 
     #[test]

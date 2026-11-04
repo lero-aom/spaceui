@@ -256,6 +256,26 @@ fn empty_single_and_invalid_width_sliders_stay_finite() {
 }
 
 #[test]
+fn large_slider_ranges_do_not_overflow_marker_positions() {
+    use spaceui::egui::{Context, RawInput, Shape};
+    let ctx = Context::default();
+    spaceui::Theme { fonts: spaceui::Fonts::BUNDLED, ..Default::default() }.install(&ctx);
+    let mut index = usize::MAX;
+    let output = ctx.run_ui(RawInput::default(), |ui| {
+        widgets::notches(ui, 1.0e25, usize::MAX, &mut index);
+    });
+    let mut markers = 0;
+    for clipped in &output.shapes {
+        if let Shape::Circle(circle) = &clipped.shape {
+            assert!(circle.center.is_finite(), "slider markers must stay finite for finite dimensions");
+            markers += 1;
+        }
+    }
+    assert_eq!(markers, 512, "large ranges retain bounded paint work");
+    output.drop_without_applying_deltas();
+}
+
+#[test]
 fn disabled_sliders_ignore_keyboard_and_screen_reader_input() {
     let mut harness = accessible_harness(2, |ui, index| {
         ui.add_enabled_ui(false, |ui| widgets::notches_labeled(ui, 200.0, 5, index, "Effort"));

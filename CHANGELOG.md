@@ -38,6 +38,10 @@ follows [Semantic Versioning](https://semver.org/).
   and animated scrolling while reduced motion is enabled.
 - Screenshot capture lifecycle and original-viewport targeting; malformed screenshot buffers, overflowing
   paint geometry and text that exceeded very narrow regions.
+- Composer submission when Shift changes in the same frame as Enter, and Markdown emphasis leaking
+  from delimiters inside code spans or links.
+- Same-frame splitter geometry, translated polygon precision, translucent radial-glow colors,
+  redundant reduced-motion repaints, narrow/invalid card plates and overflowing slider interpolation.
 
 ### Migration notes
 

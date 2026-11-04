@@ -4,7 +4,7 @@ mod common;
 
 use common::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
-use spaceui::egui::{Key, Pos2, Role, Ui, Vec2, ViewportId, pos2, vec2};
+use spaceui::egui::{Event, Key, Modifiers, Pos2, Role, Shape, Ui, Vec2, ViewportId, pos2, vec2};
 use spaceui::shell::WindowLabels;
 use spaceui::{Icon, Metrics, RailItem, Regions, Shell, Theme};
 
@@ -267,6 +267,61 @@ fn splitters_support_keyboard_and_accessibility_adjustments() {
         harness.run();
         assert!((harness.state().1[index] - 400.0).abs() < 0.01);
         assert_eq!(harness.get_by_label(name).accesskit_node().numeric_value(), Some(400.0));
+    }
+}
+
+#[test]
+fn splitter_changes_update_regions_in_the_input_frame() {
+    let mut harness =
+        accessible_shell(vec2(1400.0, 900.0), (0, [300.0, 300.0], None), |ui, (page, widths, regions)| {
+            let [left, right] = widths;
+            let shown = Shell::new("Columns")
+                .left_column(left, 200.0..=400.0)
+                .right_column(right, 200.0..=400.0)
+                .show(ui, page);
+            let left_rect = shown.left.expect("left column");
+            let right_rect = shown.right.expect("right column");
+            assert!((left_rect.width() - *left).abs() < 0.01, "left geometry must reflect this frame's input");
+            assert!((right_rect.width() - *right).abs() < 0.01, "right geometry must reflect this frame's input");
+            assert!(left_rect.right() < shown.main.left() && shown.main.right() < right_rect.left());
+            *regions = Some(shown);
+        });
+    for (index, label) in [(0, "Left column width"), (1, "Right column width")] {
+        harness.get_by_label(label).focus();
+        harness.run();
+        for (keyboard, expected) in [(true, 400.0), (false, 250.0)] {
+            if keyboard {
+                harness.event(Event::Key {
+                    key: Key::End,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Modifiers::NONE,
+                });
+            } else {
+                harness.get_by_label(label).set_value_accesskit(expected);
+            }
+            // Process just the input event, without an idle frame masking stale geometry.
+            harness.step();
+            assert!((f64::from(harness.state().1[index]) - expected).abs() < 0.01);
+            let shown = harness.state().2.expect("shell regions");
+            let divider = harness.get_by_label(label).rect();
+            let (divider_edge, column_edge) = if index == 0 {
+                (divider.left(), shown.left.expect("left column").right())
+            } else {
+                (divider.right(), shown.right.expect("right column").left())
+            };
+            assert!((divider_edge - column_edge).abs() < 0.01, "accessible divider must follow the column");
+            assert!(
+                harness.output().shapes.iter().any(|clipped| {
+                    matches!(&clipped.shape, Shape::LineSegment { points, .. }
+                    if (points[0].x - divider.center().x).abs() < 0.01
+                        && (points[1].x - divider.center().x).abs() < 0.01
+                        && points[0].y < points[1].y)
+                }),
+                "focused divider must be painted at its updated position"
+            );
+        }
     }
 }
 

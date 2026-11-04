@@ -1,6 +1,6 @@
 use crate::Theme;
 use egui::accesskit::{Action, ActionData, Orientation};
-use egui::{CursorIcon, EventFilter, Key, Modifiers, Rect, Response, Role, Sense, Stroke, Ui, WidgetInfo};
+use egui::{CursorIcon, EventFilter, Key, Modifiers, Rect, Response, Role, Sense, Stroke, Ui, WidgetInfo, vec2};
 use std::ops::RangeInclusive;
 
 #[derive(Clone, Copy)]
@@ -53,6 +53,11 @@ pub(super) fn show(
     if old.to_bits() != width.to_bits() {
         response.mark_changed();
     }
+    // Interact at the previous position, then publish and paint the handle
+    // beside the column's updated edge in this same frame.
+    let rect = rect.translate(vec2(side.direction() * (*width - old), 0.0));
+    response.rect = rect;
+    response.interact_rect = rect.intersect(ui.clip_rect());
     response.widget_info(|| {
         let mut info = WidgetInfo::labeled(Role::Splitter, editable, label);
         info.value = Some(f64::from(*width));

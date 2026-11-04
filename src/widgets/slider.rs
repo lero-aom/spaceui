@@ -28,7 +28,7 @@ pub fn notches_labeled(ui: &mut Ui, width: f32, count: usize, index: &mut usize,
     let (rect, mut response) = ui.allocate_exact_size(vec2(width, 20.0), sense);
     let (x0, x1) = (rect.left() + 7.0, rect.right() - 7.0);
     let steps = count.saturating_sub(1).max(1) as f32;
-    let x_of = |k: usize| x0 + (x1 - x0) * k as f32 / steps;
+    let x_of = |k: usize| x0 + (x1 - x0) * (k as f32 / steps);
     let old = *index;
     *index = (*index).min(count.saturating_sub(1));
     if editable

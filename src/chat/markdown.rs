@@ -378,7 +378,51 @@ impl Markers {
             }
             i += length;
         }
+        result.exclude_token_emphasis(text);
         result
+    }
+
+    /// Code and link contents are emitted as one token. A delimiter inside
+    /// them cannot close surrounding emphasis: the renderer jumps over it.
+    fn exclude_token_emphasis(&mut self, text: &str) {
+        if self.0[..4].iter().all(Vec::is_empty) {
+            return;
+        }
+        let mut tokens = Vec::new();
+        let mut i = 0;
+        while i < text.len() {
+            let rest = &text[i..];
+            let ch = rest.chars().next().expect("valid character boundary");
+            if ch == '\\'
+                && let Some(next) = rest[1..].chars().next()
+                && next.is_ascii_punctuation()
+            {
+                i += 1 + next.len_utf8();
+                continue;
+            }
+            let end = match ch {
+                '`' => self.next(4, i).map(|end| end + 1),
+                '[' => markdown_link(text, i, self).map(|(_, _, used)| i + used),
+                _ => bare_url(text, i).map(|url| i + url.len()),
+            };
+            if let Some(end) = end {
+                tokens.push(i..end);
+                i = end;
+            } else {
+                i += ch.len_utf8();
+            }
+        }
+        // Both lists are sorted. Each token is visited at most once per
+        // delimiter kind, avoiding a suffix scan for every emphasis opener.
+        for positions in &mut self.0[..4] {
+            let mut token = 0;
+            positions.retain(|position| {
+                while token < tokens.len() && tokens[token].end <= *position {
+                    token += 1;
+                }
+                token == tokens.len() || *position < tokens[token].start
+            });
+        }
     }
 
     fn next(&self, kind: usize, after: usize) -> Option<usize> {
@@ -504,6 +548,27 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn delimiters_in_code_and_links_do_not_leak_emphasis_into_trailing_text() {
+        let p = Palette::CARBON_COPPER;
+        let font = FontId::proportional(13.0);
+        for (source, expected) in [
+            ("**a `**` tail", "**a ** tail"),
+            ("*a `*` tail", "*a * tail"),
+            ("**a [**](https://example.org) tail", "**a ** tail"),
+            ("**a [label](https://example.org/**) tail", "**a label tail"),
+            ("**a https://example.org/** tail", "**a https://example.org/** tail"),
+            ("**a `**` b** tail", "a ** b tail"),
+            ("_a `__` b_ tail", "a __ b tail"),
+        ] {
+            let job = inline_job(source, &font, p.text, &p);
+            assert_eq!(job.text, expected, "{source:?}");
+            let tail = job.sections.last().expect("trailing text has a layout section");
+            assert_eq!(tail.format.font_id, font, "{source:?}");
+            assert!(!tail.format.italics, "{source:?}");
         }
     }
 

@@ -1,6 +1,7 @@
 # Rust code quality review
 
-Reviewed on 2026-11-04, starting from `d7f5097`. This review covers every library module,
+Reviewed on 2026-11-04, initially from `d7f5097`, with a follow-up from `f47b7bf`.
+This review covers every library module,
 its public contracts, and the supporting Rust tests, examples and feature configurations.
 It records concrete findings, not a certification that every possible defect has been found.
 
@@ -34,12 +35,39 @@ The primary references were the [Rust API Guidelines checklist](https://rust-lan
 | Unsafe code | **Contained:** one private Windows DWM wrapper with the system ABI, a live borrowed window handle and a four-byte value valid throughout the call. No new unsafe operation was needed. | Keep the crate-wide unsafe-code denial and the narrow wrapper exception. Add checks requiring explicit unsafe blocks and documented safety arguments. |
 | Compatibility and build hygiene | **Already strong:** locked dependencies, explicit MSRV, feature tests, strict Clippy/rustdoc, platform CI and package verification. | Preserve existing public fields, function signatures and error variants. Keep the scoped graphics-cast allowances; avoid blanket restriction lints and unnecessary new dependencies. |
 
+## Follow-up findings
+
+The follow-up checked the official guidance again and began with passing format, strict Clippy,
+88 unit/interaction tests and 25 documentation tests. Manual review still found these defects:
+
+| Area | Defect | Correction and regression |
+| --- | --- | --- |
+| Keyboard events | Composer submission used the final frame's Shift state rather than the state when Enter was pressed. Releasing Shift in the same frame could send a newline draft. | Read modifiers from the Enter event. Exercise both modifier-change directions and IME text commits. |
+| Markdown tokens | Emphasis could close on a delimiter inside code or a link, then remain active after the renderer skipped over that delimiter. | Exclude token contents from the emphasis index; preserve unmatched markers. Cover code, link labels/destinations and bare URLs, including a fuzz seed. Skip the extra pass when there are no emphasis markers. |
+| Splitter state | Input updated the stored column width after its returned rectangle was already calculated. | Build column/main regions, divider indicators and accessible bounds from the updated width in the same frame; test keyboard and accessibility adjustments on both sides. |
+| Polygon arithmetic | Absolute-coordinate cross products lost the area of small polygons translated far from the origin. | Calculate area relative to the first vertex; verify translated polygons retain their fill and winding. |
+| Alpha handling | A translucent radial-glow color was premultiplied twice when replacing its opacity. | Unmultiply RGB before applying the requested alpha; regress a translucent saturated color. |
+| Repaint lifecycle | Calling the reduced-motion setter each frame requested perpetual repainting even when nothing changed. | Repaint only when motion settings change; test that repeated preferences settle and actual changes still wake the UI. |
+| Card geometry | Invalid rectangles still produced border/sheen shapes, and narrow plates could invert the sheen endpoints. | Reject invalid geometry and clamp finite radii/sheens to the rectangle; test invalid and tiny positive rectangles. |
+| Slider arithmetic | Multiplying width by a notch index before dividing could overflow for large finite inputs. | Multiply by the normalized fraction; verify finite positions while retaining the 512-marker paint bound. |
+
+No public signatures, feature definitions, dependency versions or unsafe operations changed.
+Existing lint exceptions remain scoped to intentional graphics conversions and naming.
+
 ## Verification
 
 The fixes have targeted regressions plus the full unit, interaction, example and documentation suites.
 Strict Clippy covers all targets/features on stable Rust and Rust 1.95. Core-only tests and doctests
 exercise the optional-module boundaries. Visual tests compare committed images without automatically
 accepting changes, and benchmarks measure allocation behavior separately from timing.
+
+The follow-up passed 98 unit/interaction tests, all example targets, 25 doctests and four rendered
+regression tests on Windows with Rust 1.97.1. Rust 1.95 passed strict Clippy, the behavior suite,
+doctests, and check/test/rustdoc for core-only and each individual optional feature. External
+core/desktop consumers and local package verification passed. Both lockfiles passed `cargo audit`;
+`cargo deny` passed advisory, license, source and ban policies with the existing duplicate-version
+warnings. Benchmark results and the parser correction's allocation cost are recorded in
+[performance.md](performance.md). Hosted platform and fuzz checks run on the pushed commit.
 
 The previous hosted run passed Windows/Linux/macOS stable and MSRV builds, all feature configurations,
 external-consumer checks and dependency auditing. Its parser fuzz failure supplied a permanent regression.

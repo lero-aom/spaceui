@@ -4,7 +4,7 @@ mod common;
 
 use common::Harness;
 use spaceui::chat::{self, ChatLayout, Composer, ComposerResponse, Tab, TabAction};
-use spaceui::egui::{Key, Modifiers, Rect, pos2, vec2};
+use spaceui::egui::{Event, ImeEvent, Key, Modifiers, Rect, pos2, vec2};
 
 fn column() -> Rect {
     Rect::from_min_size(pos2(1000.0, 60.0), vec2(380.0, 800.0))
@@ -63,6 +63,56 @@ fn enter_sends_the_draft_and_shift_enter_does_not() {
         assert_eq!(response.send, sends, "with {modifiers:?}");
         assert!(draft.starts_with("How is SPY?"), "the app takes the draft, not the composer: {draft:?}");
     }
+}
+
+#[test]
+fn composer_submission_uses_the_enter_events_modifiers() {
+    for (pressed, after, sends) in
+        [(Modifiers::SHIFT, Modifiers::NONE, false), (Modifiers::NONE, Modifiers::SHIFT, true)]
+    {
+        let mut harness = Harness::new();
+        let rect = ChatLayout::new(column(), 120.0).composer;
+        let mut draft = "Hello".to_owned();
+        let mut response = ComposerResponse::default();
+        let mut first = true;
+        let mut show = |ui: &mut spaceui::egui::Ui| {
+            response = Composer::new(1, &mut draft).focus(std::mem::take(&mut first)).show(ui, rect, |_| {});
+        };
+        harness.frame(Vec::new(), &mut show);
+        harness.frame_with(
+            vec![
+                Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: pressed },
+                Event::ModifiersChanged(after),
+            ],
+            pressed,
+            &mut show,
+        );
+        assert_eq!(response.send, sends, "pressed with {pressed:?}, released with {after:?}");
+        assert_eq!(draft.contains('\n'), pressed.shift);
+    }
+}
+
+#[test]
+fn ime_composition_commits_text_without_sending_the_draft() {
+    let mut harness = Harness::new();
+    let rect = ChatLayout::new(column(), 120.0).composer;
+    let mut draft = String::new();
+    let mut response = ComposerResponse::default();
+    let mut first = true;
+    let mut show = |ui: &mut spaceui::egui::Ui| {
+        let shown = Composer::new(1, &mut draft).focus(std::mem::take(&mut first)).show(ui, rect, |_| {});
+        response.send |= shown.send;
+    };
+    harness.frame(Vec::new(), &mut show);
+    harness.frame(
+        vec![Event::Ime(ImeEvent::Preedit { text: "にほん".to_owned(), active_range_chars: Some(0..3) })],
+        &mut show,
+    );
+    // Integrations withhold key events consumed by IME, including the Enter
+    // that accepts a candidate; egui receives only the resulting commit.
+    harness.frame(vec![Event::Ime(ImeEvent::Commit("日本".to_owned()))], &mut show);
+    assert_eq!(draft, "日本");
+    assert!(!response.send);
 }
 
 #[test]

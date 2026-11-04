@@ -1,8 +1,9 @@
 use super::ChatLabels;
 use crate::{Icon, Theme, paint, theme::Palette};
 use egui::{
-    Align, Color32, CursorIcon, FontId, Frame, Id, Key, KeyboardShortcut, Layout, Modifiers, Rect, Response, RichText,
-    Role, ScrollArea, Sense, Spinner, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2, WidgetInfo, pos2, vec2,
+    Align, Color32, CursorIcon, Event, FontId, Frame, Id, Key, KeyboardShortcut, Layout, Modifiers, Rect, Response,
+    RichText, Role, ScrollArea, Sense, Spinner, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2, WidgetInfo, pos2,
+    vec2,
 };
 
 const FONT_SIZE: f32 = 14.0;
@@ -133,7 +134,14 @@ impl<'a> Composer<'a> {
             .inner;
         let enter = ui.is_enabled()
             && (edit.has_focus() || edit.lost_focus())
-            && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+            && ui.input(|i| {
+                // Modifiers can change again before the frame is processed.
+                // Use the Enter event's state so releasing Shift cannot send
+                // a draft after inserting a newline in the same frame.
+                i.events.iter().any(|event| {
+                    matches!(event, Event::Key { key: Key::Enter, pressed: true, modifiers, .. } if !modifiers.shift)
+                })
+            });
         let has_text = !self.draft.trim().is_empty();
 
         let row = Rect::from_min_max(
