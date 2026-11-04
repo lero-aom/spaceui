@@ -38,11 +38,18 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
         run: |
           from pathlib import Path
+          import os
+          import shutil
           import subprocess
           import tomllib
 
           package = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))["package"]
-          manifest = Path("target/package") / f"{package['name']}-{package['version']}" / "Cargo.toml"
+          name = f"{package['name']}-{package['version']}"
+          manifest = Path("target/package") / name / "Cargo.toml"
+          # Keep the distributable outside Cargo's build/cache directory while checking it.
+          artifacts = Path(os.environ["RUNNER_TEMP"]) / "spaceui-release-package"
+          artifacts.mkdir(exist_ok=True)
+          shutil.copy2(Path("target/package") / f"{name}.crate", artifacts)
           for command in [
               ["doc", "--no-deps"],
               ["check", "--examples"],
@@ -55,7 +62,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-package
-          path: target/package/*.crate
+          path: ${{ runner.temp }}/spaceui-release-package/*.crate
           if-no-files-found: error
 
   publish:
