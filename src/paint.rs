@@ -306,7 +306,7 @@ mod tests {
     #[test]
     fn finite_coordinates_with_overflowing_extents_are_rejected() {
         let rect = Rect::from_min_max(pos2(-f32::MAX, -f32::MAX), pos2(f32::MAX, f32::MAX));
-        assert!(rounded_rect_points(rect, f32::MAX, 2.0).is_empty());
+        assert_eq!(rounded_rect_points(rect, f32::MAX, 2.0), [] as [Pos2; 0]);
         assert!(gradient_mesh(rect, Color32::WHITE, Color32::BLACK, f32::MAX, 2.0).is_empty());
     }
 
