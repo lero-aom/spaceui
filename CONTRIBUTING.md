@@ -61,7 +61,7 @@ The audit and concrete examples are recorded in [docs/rust-quality.md](docs/rust
 For visual changes, attach screenshots of the gallery in both themes:
 
 ```sh
-SPACEUI_SCREENSHOT=carbon.png cargo run --example gallery
+SPACEUI_SCREENSHOT=carbon.png SPACEUI_THEME=carbon_copper cargo run --example gallery
 SPACEUI_SCREENSHOT=deep.png SPACEUI_THEME=deep_space cargo run --example gallery
 ```
 

@@ -140,18 +140,18 @@ pub enum Backdrop {
 /// use spaceui::egui::Color32;
 /// use spaceui::{Backdrop, Palette, Theme};
 ///
-/// let arctic = Theme {
-///     name: "Arctic",
+/// let lunar = Theme {
+///     name: "Lunar",
 ///     palette: Palette {
-///         accent: Color32::from_rgb(64, 156, 255),
-///         accent_hi: Color32::from_rgb(130, 196, 255),
-///         accent_lo: Color32::from_rgb(28, 98, 196),
+///         accent: Color32::from_rgb(125, 211, 252),
+///         accent_hi: Color32::from_rgb(186, 230, 253),
+///         accent_lo: Color32::from_rgb(82, 160, 220),
 ///         ..Palette::DEEP_SPACE
 ///     },
 ///     backdrop: Backdrop::Plain,
 ///     ..Theme::deep_space()
 /// };
-/// assert_eq!(arctic.metrics, Theme::deep_space().metrics);
+/// assert_eq!(lunar.metrics, Theme::deep_space().metrics);
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {

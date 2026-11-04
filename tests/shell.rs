@@ -10,7 +10,7 @@ use spaceui::{Icon, Metrics, RailItem, Regions, Shell, Theme};
 
 const RAIL: &[RailItem] = &[
     RailItem::page(Icon::Home, "Home"),
-    RailItem::page(Icon::Chart, "Markets"),
+    RailItem::page(Icon::Star, "Targets"),
     RailItem::Divider,
     RailItem::page(Icon::Settings, "Settings"),
 ];
@@ -331,11 +331,11 @@ fn disabled_shell_blocks_rail_and_splitter_actions_but_keeps_window_controls() {
         let _ = Shell::new("Blocked").rail(RAIL).right_column(width, 200.0..=400.0).enabled(false).show(ui, page);
     });
     assert!(harness.get_by_label("Right column width").accesskit_node().is_disabled());
-    assert!(harness.get_by_label("Markets").accesskit_node().is_disabled());
+    assert!(harness.get_by_label("Targets").accesskit_node().is_disabled());
     assert!(!harness.get_by_label("Close window").accesskit_node().is_disabled());
     harness.get_by_label("Right column width").set_value_accesskit(400.0);
     harness.get_by_label("Right column width").increment_accesskit();
-    harness.get_by_label("Markets").click_accesskit();
+    harness.get_by_label("Targets").click_accesskit();
     harness.key_press(Key::End);
     harness.run();
     assert_eq!(harness.state().0, 0);
@@ -410,7 +410,7 @@ fn the_rail_reports_one_selection_in_the_click_frame() {
     harness.get_by_label("Settings").click();
     harness.step();
     assert_eq!(*harness.state(), 2);
-    for label in ["Home", "Markets", "Settings"] {
+    for label in ["Home", "Targets", "Settings"] {
         assert_eq!(harness.get_by_label(label).accesskit_node().is_selected(), Some(label == "Settings"));
     }
 }

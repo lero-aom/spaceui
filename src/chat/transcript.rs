@@ -158,7 +158,7 @@ pub enum StepStatus {
 /// # ctx.run_ui(Default::default(), |ui| {
 /// let steps = [
 ///     Step { icon: Icon::Globe, title: "Opened page", detail: "example.com", time: "09:41", status: StepStatus::Done },
-///     Step { icon: Icon::Search, title: "Searching", detail: "SPY trend", time: "", status: StepStatus::Running },
+///     Step { icon: Icon::Search, title: "Searching", detail: "M31 observing notes", time: "", status: StepStatus::Running },
 /// ];
 /// for (i, step) in steps.iter().enumerate() {
 ///     step.show(ui, i > 0, i + 1 < steps.len());

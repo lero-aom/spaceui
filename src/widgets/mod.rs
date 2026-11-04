@@ -33,7 +33,7 @@
 //!     widgets::secondary(ui, "Cancel");
 //!     # #[cfg(feature = "svg")]
 //!     widgets::badge(ui, Icon::Shield, "Read-only", Tone::Positive);
-//!     widgets::chip(ui, "PAPER", Tone::Warning);
+//!     widgets::chip(ui, "DEMO", Tone::Warning);
 //! });
 //! # }).drop_without_applying_deltas();
 //! ```
@@ -52,7 +52,7 @@
 //! });
 //! widgets::notches_labeled(ui, 160.0, 5, &mut effort, "Effort");
 //! widgets::text_field_id(ui, "search", &mut query, "Search…")
-//!     .accessible_name("Symbol search");
+//!     .accessible_name("Target search");
 //! # }).drop_without_applying_deltas();
 //! ```
 //!

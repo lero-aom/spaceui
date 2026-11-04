@@ -59,9 +59,9 @@ fn enter_sends_the_draft_and_shift_enter_does_not() {
             response.send |= shown.send;
         };
         harness.frame(Vec::new(), &mut show);
-        harness.type_then("How is SPY?", Key::Enter, modifiers, show);
+        harness.type_then("Where is M31?", Key::Enter, modifiers, show);
         assert_eq!(response.send, sends, "with {modifiers:?}");
-        assert!(draft.starts_with("How is SPY?"), "the app takes the draft, not the composer: {draft:?}");
+        assert!(draft.starts_with("Where is M31?"), "the app takes the draft, not the composer: {draft:?}");
     }
 }
 

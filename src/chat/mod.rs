@@ -19,15 +19,15 @@
 //! # let mut draft = String::new();
 //! # ctx.run_ui(Default::default(), |ui| {
 //! let column = ui.max_rect(); // e.g. `Regions::right` from the shell
-//! let hint = "Ask anything";
+//! let hint = "Ask about the observing plan";
 //! let layout = ChatLayout::new(column, Composer::measure(ui, column.width(), &draft, hint));
 //!
-//! let tabs = [Tab { id: 1, title: "Welcome", busy: false, closable: false }];
+//! let tabs = [Tab { id: 1, title: "Tonight's plan", busy: false, closable: false }];
 //! let _action = chat::tab_strip(ui, layout.strip, &tabs, 0);
 //!
 //! let mut body = ui.new_child(egui::UiBuilder::new().max_rect(layout.body));
-//! transcript::user_bubble(&mut body, "How is SPY trading?", "09:41");
-//! transcript::reply(&mut body, "Above its **daily** trend.", false);
+//! transcript::user_bubble(&mut body, "Add M31 to the observing plan", "21:41");
+//! transcript::reply(&mut body, "Added **M31** to your observation plan.", false);
 //!
 //! let response = Composer::new(1, &mut draft).hint(hint).show(ui, layout.composer, |_accessories| {});
 //! if response.send {

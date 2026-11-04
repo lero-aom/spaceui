@@ -28,7 +28,8 @@
 //! ```
 //!
 //! The repository's `minimal`, `custom_theme` and `gallery` examples show
-//! complete eframe applications, a custom palette, and every component.
+//! complete eframe astronomy demos, a custom palette, and every component.
+//! Their observing sessions use illustrative data rather than live sky calculations.
 //!
 //! # Features
 //!

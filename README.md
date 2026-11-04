@@ -8,7 +8,7 @@ A design system for [egui](https://github.com/emilk/egui) desktop apps: themes, 
 widgets, a custom-window shell and a chat kit. Install a theme, show the shell and fill its regions; every part also
 works on its own.
 
-![The gallery in the Carbon / Copper theme](docs/screenshots/carbon-copper.png)
+![The astronomy gallery in the Deep Space theme](docs/screenshots/deep-space.png)
 
 ## Highlights
 
@@ -25,7 +25,7 @@ works on its own.
 - **Plain data, plain functions.** Widgets are functions returning egui's `Response`; themes are structs. There is no
   framework to adopt.
 
-![The gallery in the Deep Space theme](docs/screenshots/deep-space.png)
+![The astronomy gallery in the Carbon / Copper theme](docs/screenshots/carbon-copper.png)
 
 ## Getting started
 
@@ -35,7 +35,7 @@ spaceui = "0.1"
 eframe = "0.37"
 ```
 
-A themed window with a title bar, an icon rail, a main card and a side column
+A small observatory with a sky view, a target catalog and an observation-plan column
 ([`examples/minimal.rs`](examples/minimal.rs)):
 
 ```rust,no_run
@@ -43,8 +43,8 @@ use spaceui::egui;
 use spaceui::prelude::*;
 
 const RAIL: &[RailItem] = &[
-    RailItem::page(Icon::Home, "Home"),
-    RailItem::page(Icon::Chart, "Markets"),
+    RailItem::page(Icon::Orbit, "Sky"),
+    RailItem::page(Icon::Star, "Targets"),
     RailItem::Divider,
     RailItem::page(Icon::Settings, "Settings"),
 ];
@@ -53,36 +53,57 @@ const RAIL: &[RailItem] = &[
 struct App {
     page: usize,
     side: f32,
+    queued: bool,
 }
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let regions = Shell::new("My App")
+        let regions = Shell::new("Observatory")
             .logo(Icon::Orbit.svg())
             .rail(RAIL)
             .right_column(&mut self.side, 320.0..=560.0)
             .show(ui, &mut self.page);
 
         ui.scope_builder(egui::UiBuilder::new().max_rect(regions.main), |ui| {
-            ui.heading(["Home", "Markets", "Settings"][self.page]);
-            if widgets::primary(ui, "Connect").clicked() {
-                // ...
+            ui.heading(["Sky", "Targets", "Settings"][self.page]);
+            widgets::caption(ui, "Demo observing session · sample data only");
+            match self.page {
+                0 => {
+                    ui.label("M31 · Andromeda Galaxy");
+                    if widgets::primary(ui, "Add M31 to plan").clicked() {
+                        self.queued = true;
+                    }
+                }
+                1 => {
+                    for target in ["M31 · Andromeda Galaxy", "M42 · Orion Nebula", "M45 · Pleiades"] {
+                        ui.label(target);
+                    }
+                }
+                _ => {
+                    ui.label("Deep Space theme · no telescope connected");
+                }
             }
         });
+        if let Some(plan) = regions.right {
+            ui.scope_builder(egui::UiBuilder::new().max_rect(plan.shrink(18.0)), |ui| {
+                ui.heading("Observation plan");
+                ui.label(if self.queued { "01 · M31 · Andromeda Galaxy" } else { "Add a target from the sky view." });
+            });
+        }
     }
 }
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         // Undecorated: the shell draws the title bar and the resize edges.
-        viewport: window::viewport("My App", "my-app"),
+        viewport: window::viewport("Observatory", "spaceui-observatory"),
         ..Default::default()
     };
     eframe::run_native(
-        "My App",
+        "Observatory",
         options,
         Box::new(|cc| {
-            let theme = Theme::carbon_copper();
+            let theme = Theme::deep_space();
             window::round_corners(cc, theme.palette.border);
             theme.install(&cc.egui_ctx);
             Ok(Box::new(App::default()))
@@ -118,15 +139,18 @@ core API, or `cargo doc --no-deps --all-features` for everything. See the
 
 | Example | Shows |
 |---|---|
-| [`minimal`](examples/minimal.rs) | The window above: shell, rail, card and side column |
-| [`custom_theme`](examples/custom_theme.rs) | A theme of your own from a few palette changes |
-| [`gallery`](examples/gallery.rs) | Every widget in both themes, and a chat column with canned replies |
+| [`minimal`](examples/minimal.rs) | The observatory above: sky, targets and an observation plan |
+| [`custom_theme`](examples/custom_theme.rs) | An astronomy app with a cool moonlit palette |
+| [`gallery`](examples/gallery.rs) | An observing dashboard, instrument controls, palette and icons, and a scripted assistant |
+
+The examples use fixed illustrative targets and session data. They do not calculate live sky positions,
+connect to equipment or call an AI service.
 
 ```sh
 cargo run --example gallery
 ```
 
-![Widgets in the gallery](docs/screenshots/controls.png)
+![Instrument controls in the astronomy gallery](docs/screenshots/controls.png)
 
 ## Organisation
 
@@ -150,8 +174,8 @@ Only the title bar and the main card are always there. Add what you need:
 ```rust,no_run
 # use spaceui::{Icon, RailItem, Shell};
 # fn ui(ui: &mut spaceui::egui::Ui, page: &mut usize, chat: &mut f32, outline: &mut f32) {
-# const RAIL: &[RailItem] = &[RailItem::page(Icon::Home, "Home")];
-let regions = Shell::new("My App")
+# const RAIL: &[RailItem] = &[RailItem::page(Icon::Orbit, "Sky")];
+let regions = Shell::new("Observatory")
     .rail(RAIL)                               // optional; without it the cards take the space
     .left_column(outline, 240.0..=400.0)      // optional
     .right_column(chat, 320.0..=560.0)        // optional
@@ -161,7 +185,7 @@ let regions = Shell::new("My App")
 # }
 ```
 
-![The chat in a left column, in the Deep Space theme](docs/screenshots/chat-left.png)
+![The observing assistant in a left column, in the Deep Space theme](docs/screenshots/chat-left.png)
 
 ## Your own theme
 
@@ -172,18 +196,19 @@ A theme is plain data: start from a built-in one and change what you need
 use spaceui::egui::Color32;
 use spaceui::{Backdrop, Palette, Theme};
 
-let arctic = Theme {
-    name: "Arctic",
+let lunar = Theme {
+    name: "Lunar",
     palette: Palette {
-        accent: Color32::from_rgb(64, 156, 255),
-        accent_hi: Color32::from_rgb(130, 196, 255),
-        accent_lo: Color32::from_rgb(28, 98, 196),
+        accent: Color32::from_rgb(125, 211, 252),
+        accent_hi: Color32::from_rgb(186, 230, 253),
+        accent_lo: Color32::from_rgb(82, 160, 220),
+        bubble: Color32::from_rgb(28, 44, 78),
         ..Palette::DEEP_SPACE
     },
-    backdrop: Backdrop::Plain,
+    backdrop: Backdrop::Starfield,
     ..Theme::deep_space()
 };
-assert_eq!(arctic.metrics, Theme::deep_space().metrics);
+assert_eq!(lunar.metrics, Theme::deep_space().metrics);
 ```
 
 Fonts are part of the theme too: Segoe UI from the system by default, egui's bundled fonts with `Fonts::BUNDLED`, or
@@ -213,6 +238,13 @@ pages and themes. The gallery wires it to environment variables:
 
 ```sh
 SPACEUI_SCREENSHOT=out.png SPACEUI_THEME=deep_space SPACEUI_PAGE=2 cargo run --example gallery
+```
+
+The gallery opens in Deep Space. To capture the observing dashboard in both built-in themes:
+
+```sh
+SPACEUI_SCREENSHOT=deep-space.png SPACEUI_THEME=deep_space cargo run --example gallery
+SPACEUI_SCREENSHOT=carbon-copper.png SPACEUI_THEME=carbon_copper cargo run --example gallery
 ```
 
 SpaceUI's own tests drive the widgets headlessly with simulated clicks and key presses; see [`tests/`](tests).

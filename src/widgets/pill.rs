@@ -6,7 +6,7 @@ use egui::{CursorIcon, Response, Role, Sense, Shape, Stroke, StrokeKind, Ui, Wid
 #[cfg(feature = "svg")]
 use egui::{Rect, Vec2};
 
-/// A small tinted status tag ("READ-ONLY", "PAPER"), sized to its text.
+/// A small tinted status tag ("TRACKING", "DEMO"), sized to its text.
 pub fn chip(ui: &mut Ui, text: &str, tone: Tone) {
     let color = tone.color(&Theme::of(ui.ctx()).palette);
     let font = semibold(super::text_size(ui, 10.5));

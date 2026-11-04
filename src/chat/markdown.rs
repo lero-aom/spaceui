@@ -14,7 +14,7 @@
 //! # let ctx = egui::Context::default();
 //! # Theme::carbon_copper().install(&ctx);
 //! # ctx.run_ui(Default::default(), |ui| {
-//! markdown::render(ui, "### Plan\n- Read **SPY** first\n- Then [the wiki](https://example.com)");
+//! markdown::render(ui, "### Plan\n- Observe **M31** first\n- Then [the field guide](https://example.com)");
 //! # }).drop_without_applying_deltas();
 //! ```
 use crate::{

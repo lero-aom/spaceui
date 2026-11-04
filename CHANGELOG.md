@@ -20,6 +20,8 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Examples and GitHub gallery screenshots now show an astronomy workbench with a selectable sky map,
+  observing plans, sample capture controls and a Deep Space default; the custom theme demonstrates a Lunar palette.
 - Public support claims distinguish automated checks from native-platform and accessibility validation.
 - Improved keyboard/accessibility metadata, input handling and rendering robustness; fallible SVG diagnostics
   and bounded texture-cache behavior.

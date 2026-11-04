@@ -40,8 +40,8 @@ fn plate_shapes(rect: Rect, radius: f32, theme: &Theme, pixels_per_point: f32) -
 /// # Theme::carbon_copper().install(&ctx);
 /// # ctx.run_ui(Default::default(), |ui| {
 /// widgets::card(ui, |ui| {
-///     widgets::section(ui, "01", "Interactive Brokers");
-///     widgets::caption(ui, "Data access only.");
+///     widgets::section(ui, "01", "Observation plan");
+///     widgets::caption(ui, "Illustrative targets only.");
 /// });
 /// # }).drop_without_applying_deltas();
 /// ```
@@ -55,7 +55,7 @@ pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     response.inner
 }
 
-/// A numbered section heading ("01  Interactive Brokers").
+/// A numbered section heading ("01  Observation plan").
 pub fn section(ui: &mut Ui, number: &str, title: &str) {
     let p = Theme::of(ui.ctx()).palette;
     ui.horizontal(|ui| {

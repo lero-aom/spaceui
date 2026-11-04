@@ -1,36 +1,46 @@
-//! The SpaceUI gallery: the shell, both themes, every widget and a chat
-//! column with canned replies (no model is called).
+//! An astronomy workbench demonstrating SpaceUI's shell, themes, widgets and
+//! chat. Sky positions, conditions and assistant replies are illustrative demo data.
 //!
 //! ```text
 //! cargo run --example gallery
 //! ```
 //!
-//! For a screenshot run, set `SPACEUI_SCREENSHOT=out.png`; `SPACEUI_THEME=deep_space`
-//! picks the Deep Space theme, `SPACEUI_CHAT=left` puts the chat on the left and
+//! For a screenshot run, set `SPACEUI_SCREENSHOT=out.png`; `SPACEUI_THEME=carbon_copper`
+//! picks the alternate theme, `SPACEUI_CHAT=left` puts the chat on the left and
 //! `SPACEUI_PAGE=0..=3` picks the page.
 use spaceui::chat::{self, ChatLayout, Composer, Tab, TabAction, transcript};
 use spaceui::egui::{self, Color32, RichText, ScrollArea, UiBuilder, vec2};
 use spaceui::prelude::*;
 
+#[path = "gallery/sky.rs"]
+mod sky;
+
 const LOGO: Svg = Svg::new("gallery/spaceui", include_str!("assets/spaceui.svg"));
-const HINT: &str = "Ask the gallery anything… (canned replies)";
-const PAGES: [&str; 4] = ["Overview", "Controls", "Palette and icons", "Settings"];
+const HINT: &str = "Ask about targets or your observing plan…";
+const PAGES: [&str; 4] = ["Tonight's sky", "Observatory", "Palette and icons", "Preferences"];
 const RAIL: &[RailItem] = &[
-    RailItem::page(Icon::Home, PAGES[0]),
-    RailItem::page(Icon::Sliders, PAGES[1]),
+    RailItem::page(Icon::Orbit, PAGES[0]),
+    RailItem::page(Icon::Camera, PAGES[1]),
     RailItem::page(Icon::Palette, PAGES[2]),
     RailItem::Divider,
     RailItem::page(Icon::Settings, PAGES[3]),
 ];
 const EFFORTS: [&str; 5] = ["Low", "Medium", "High", "Extra high", "Max"];
+const EXPOSURES: [&str; 5] = ["15 s", "30 s", "60 s", "120 s", "300 s"];
+const TARGETS: [(&str, &str, &str, &str); 4] = [
+    ("M31", "Andromeda Galaxy", "Galaxy · Andromeda", "60 × 120 s · LRGB"),
+    ("M45", "The Pleiades", "Open cluster · Taurus", "40 × 90 s · RGB"),
+    ("NGC 869 / 884", "Double Cluster", "Open clusters · Perseus", "30 × 60 s · RGB"),
+    ("M33", "Triangulum Galaxy", "Galaxy · Triangulum", "50 × 180 s · LRGB"),
+];
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: window::viewport("SpaceUI Gallery", "spaceui-gallery")
+        viewport: window::viewport("Observatory · SpaceUI", "spaceui-gallery")
             .with_icon(LOGO.window_icon(256).unwrap_or_default()),
         ..Default::default()
     };
-    eframe::run_native("SpaceUI Gallery", options, Box::new(|cc| Ok(Box::new(Gallery::new(cc)))))
+    eframe::run_native("Observatory · SpaceUI", options, Box::new(|cc| Ok(Box::new(Gallery::new(cc)))))
 }
 
 /// One transcript entry of the demo chat.
@@ -49,7 +59,7 @@ struct Conversation {
 
 impl Conversation {
     fn new(id: u64) -> Self {
-        Self { id, title: "New chat".into(), entries: Vec::new(), draft: String::new() }
+        Self { id, title: "New session".into(), entries: Vec::new(), draft: String::new() }
     }
 
     /// The canned reply: a Markdown echo of the draft.
@@ -58,10 +68,13 @@ impl Conversation {
         if self.entries.is_empty() {
             self.title = text.chars().take(28).collect();
         }
-        let reply = format!("You wrote **{text}**.\n\nThe gallery only echoes; your app plugs its own model in here.");
+        let reply = format!(
+            "Your observing note:\n\n> {text}\n\nChoose a target on the sky map, then add it to your plan. \
+             The sample sequence includes an exposure count, duration and filter set."
+        );
         self.entries.push(Entry::User(text));
         self.entries.push(Entry::Reply { text: reply, thinking: String::new(), steps: Vec::new(), open: false });
-        self.entries.push(Entry::Notice("Canned demo reply: nothing was sent to a model.".into()));
+        self.entries.push(Entry::Notice("Demo assistant · no telescope connection.".into()));
     }
 }
 
@@ -79,29 +92,36 @@ struct Gallery {
     tab: usize,
     timeframe: usize,
     effort: usize,
+    exposure: usize,
+    capture_mode: usize,
+    filter: usize,
     switch: bool,
     search: String,
+    target: usize,
+    queued: [bool; 4],
     screenshot: Option<window::Screenshot>,
 }
 
 impl Gallery {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let deep_space = std::env::var("SPACEUI_THEME").is_ok_and(|theme| theme == "deep_space");
+        let deep_space = !std::env::var("SPACEUI_THEME").is_ok_and(|theme| theme == "carbon_copper");
         let border = if deep_space { Palette::DEEP_SPACE.border } else { Palette::CARBON_COPPER.border };
         window::round_corners(cc, border);
         let mut welcome = Conversation::new(1);
-        welcome.title = "Welcome".into();
+        welcome.title = "Evening plan".into();
         welcome.entries = vec![
-            Entry::User("What is SpaceUI?".into()),
+            Entry::User("Help me plan an evening of deep-sky imaging.".into()),
             Entry::Reply {
-                text: "**SpaceUI** is a design system for *egui* desktop apps:\n\n\
-                       - a `Theme` of semantic colours, metrics and fonts\n\
-                       - anti-aliased painting and vector icons\n\
-                       - widgets, the window shell and this chat kit\n\n\
-                       > Canned demo reply: no model was called."
+                text: "**Start with Andromeda.** Its wide field makes a lovely opening target for this sample session.\n\n\
+                       ### Your observing plan\n\
+                       - **M31** · 60 × 120 s, LRGB\n\
+                       - **Double Cluster** · 30 × 60 s, RGB\n\
+                       - **M45** · 40 × 90 s, RGB\n\n\
+                       Keep a short focus check between targets. Leave a little time for a final dark-frame sequence.\n\n\
+                       > Select a marker on the sky map to explore a target and edit your plan."
                     .into(),
-                thinking: "Demo text.".into(),
-                steps: vec![("Read the theme", "Theme::of(ctx)"), ("Painted the shell", "Shell::show")],
+                thinking: "Compared the sample targets and grouped their exposure sequences into an evening plan.".into(),
+                steps: vec![("Reviewed target list", "4 deep-sky objects"), ("Prepared a session", "3 imaging sequences")],
                 open: false,
             },
         ];
@@ -118,16 +138,21 @@ impl Gallery {
             tab: 0,
             timeframe: 0,
             effort: 3,
+            exposure: 3,
+            capture_mode: 0,
+            filter: 0,
             switch: true,
             search: String::new(),
+            target: 0,
+            queued: [true, true, true, false],
             screenshot: window::Screenshot::from_env("SPACEUI_SCREENSHOT"),
         }
     }
 
     fn page(&mut self, ui: &mut egui::Ui) {
         ui.label(RichText::new(PAGES[self.page.min(3)]).font(semibold(26.0)));
-        widgets::caption(ui, "SpaceUI gallery · everything on this page follows the installed theme.");
-        ui.add_space(14.0);
+        widgets::caption(ui, "A quiet place to explore the sky and plan your next observation.");
+        ui.add_space(12.0);
         match self.page {
             0 => self.overview(ui),
             1 => self.controls(ui),
@@ -138,32 +163,87 @@ impl Gallery {
 
     fn overview(&mut self, ui: &mut egui::Ui) {
         ui.columns(4, |columns| {
-            widgets::metric(&mut columns[0], "S&P 500 / SPY", "578.80", "+1.19% vs prior close", Tone::Neutral);
-            widgets::metric(&mut columns[1], "DAILY CONTEXT", "Bullish", "Price / SMA20 / SMA50", Tone::Positive);
-            widgets::metric(&mut columns[2], "RELATIVE STRENGTH", "7", "Positive · 60 min", Tone::Positive);
-            widgets::metric(&mut columns[3], "RELATIVE WEAKNESS", "4", "Negative · 60 min", Tone::Negative);
+            widgets::metric(&mut columns[0], "SKY QUALITY", "21.4", "mag/arcsec² · dark skies", Tone::Neutral);
+            widgets::metric(&mut columns[1], "SEEING", "1.2″", "Steady · sample conditions", Tone::Positive);
+            widgets::metric(&mut columns[2], "MOON", "18%", "Illumination · demo session", Tone::Accent);
+            let count = self.queued.iter().filter(|queued| **queued).count();
+            widgets::metric(
+                &mut columns[3],
+                "OBSERVING PLAN",
+                &format!("{count} targets"),
+                "Ready for the night",
+                Tone::Info,
+            );
         });
         ui.add_space(12.0);
-        widgets::tabs(ui, &mut self.tab, &["Chart", "Overview", "News", "Options"]);
+        widgets::tabs(ui, &mut self.tab, &["Sky map", "Target list", "Session notes"]);
         ui.add_space(8.0);
+        if self.tab == 0 {
+            widgets::card(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    widgets::section(ui, "01", "Explore the northern sky");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        widgets::segmented(ui, &mut self.timeframe, &["Wide", "Field", "Detail"]);
+                    });
+                });
+                ui.add_space(6.0);
+                sky::show(ui, &mut self.target, self.timeframe);
+            });
+            ui.add_space(10.0);
+            self.target_card(ui);
+        } else if self.tab == 1 {
+            widgets::card(ui, |ui| {
+                ui.set_width(ui.available_width());
+                widgets::section(ui, "01", "Deep-sky targets");
+                for (index, (catalogue, name, kind, exposure)) in TARGETS.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        if ui.selectable_label(self.target == index, *catalogue).clicked() {
+                            self.target = index;
+                        }
+                        ui.label(*name);
+                        widgets::caption(ui, *kind);
+                    });
+                    widgets::caption(ui, *exposure);
+                    ui.add_space(8.0);
+                }
+            });
+            ui.add_space(10.0);
+            self.target_card(ui);
+        } else {
+            widgets::card(ui, |ui| {
+                ui.set_width(ui.available_width());
+                widgets::section(ui, "01", "An evening under the stars");
+                chat::markdown::render(
+                    ui,
+                    "### Before the first exposure\n- Check polar alignment and focus.\n- Start with **M31**, then revisit focus before moving to a star cluster.\n- Save calibration frames with the session.\n\nThese are sample observing notes; the sky map and conditions are illustrative.",
+                );
+            });
+        }
+    }
+
+    fn target_card(&mut self, ui: &mut egui::Ui) {
+        let (catalogue, name, kind, exposure) = TARGETS[self.target];
         widgets::card(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                widgets::section(ui, "01", "A card");
+                widgets::section(ui, "02", name);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    widgets::segmented(ui, &mut self.timeframe, &["M5", "H1", "D1"]);
+                    widgets::chip(ui, catalogue, Tone::Accent);
                 });
             });
-            ui.label(
-                "Cards sit on the main plate. Their gradient, border and sheen come from the palette; \
-                 their edges are anti-aliased at any scale.",
-            );
-            ui.add_space(6.0);
+            widgets::caption(ui, format!("{kind}  ·  Sample sequence: {exposure}"));
+            ui.add_space(8.0);
             ui.horizontal(|ui| {
-                widgets::primary(ui, "Primary action");
-                widgets::secondary(ui, "Secondary");
-                widgets::chip(ui, "PAPER", Tone::Warning);
-                widgets::chip(ui, "LIVE", Tone::Positive);
+                let queued = &mut self.queued[self.target];
+                if widgets::primary(ui, if *queued { "Remove from plan" } else { "Add to plan" }).clicked() {
+                    *queued = !*queued;
+                }
+                if widgets::secondary(ui, "Ask about this target").clicked() {
+                    self.chats[self.active].draft = format!("Help me plan an observation of {name} ({catalogue}).");
+                    self.focus = true;
+                }
+                widgets::chip(ui, if *queued { "IN YOUR PLAN" } else { "AVAILABLE" }, Tone::Positive);
             });
         });
     }
@@ -172,61 +252,68 @@ impl Gallery {
         ui.columns(2, |columns| {
             widgets::card(&mut columns[0], |ui| {
                 ui.set_width(ui.available_width());
-                widgets::section(ui, "01", "Buttons");
+                widgets::section(ui, "01", "Mount and camera");
                 ui.horizontal(|ui| {
-                    widgets::primary(ui, "Connect");
-                    widgets::secondary(ui, "Cancel");
-                    ui.add_enabled_ui(false, |ui| widgets::primary(ui, "Disabled"));
+                    if widgets::primary(ui, if self.switch { "Pause tracking" } else { "Start tracking" }).clicked() {
+                        self.switch = !self.switch;
+                    }
+                    if widgets::secondary(ui, "Park mount").clicked() {
+                        self.switch = false;
+                    }
+                    ui.add_enabled_ui(false, |ui| widgets::primary(ui, "Abort"));
                 });
                 ui.horizontal(|ui| {
                     for (icon, label) in [
-                        (Icon::Search, "Search"),
-                        (Icon::Reload, "Reload"),
-                        (Icon::Star, "Favorite"),
-                        (Icon::More, "More actions"),
+                        (Icon::Search, "Find target"),
+                        (Icon::Reload, "Refresh catalogue"),
+                        (Icon::Star, "Favorite target"),
+                        (Icon::Camera, "Camera settings"),
                     ] {
                         widgets::icon_button_labeled(ui, icon, 34.0, label);
                     }
                 });
                 ui.add_space(8.0);
-                widgets::section(ui, "02", "Pills, badges and chips");
+                widgets::section(ui, "02", "Session conditions");
                 ui.horizontal(|ui| {
-                    widgets::badge(ui, Icon::Shield, "Read-only", Tone::Positive);
-                    widgets::pill(ui, Some(Tone::Warning), "Preview data");
-                    widgets::pill(ui, None, "Disconnect");
+                    widgets::badge(ui, Icon::Star, "Clear sky", Tone::Positive);
+                    widgets::pill(ui, Some(Tone::Warning), "Dew watch");
+                    widgets::pill(ui, None, "Sample night");
                 });
                 ui.horizontal(|ui| {
                     for (text, tone) in [
-                        ("ACCENT", Tone::Accent),
-                        ("POSITIVE", Tone::Positive),
-                        ("NEGATIVE", Tone::Negative),
-                        ("INFO", Tone::Info),
-                        ("MUTED", Tone::Muted),
-                        ("CUSTOM", Tone::Custom(Color32::from_rgb(64, 156, 255))),
+                        ("LRGB", Tone::Accent),
+                        ("GUIDING", Tone::Positive),
+                        ("CLOUD", Tone::Negative),
+                        ("COOLING", Tone::Info),
+                        ("IDLE", Tone::Muted),
                     ] {
                         widgets::chip(ui, text, tone);
                     }
                 });
+                ui.add_space(10.0);
+                widgets::caption(ui, "Equipment controls use local demo state; no hardware is connected.");
             });
             widgets::card(&mut columns[1], |ui| {
                 ui.set_width(ui.available_width());
-                widgets::section(ui, "03", "Inputs");
-                widgets::text_field(ui, &mut self.search, "Search symbols, companies or strategies…")
-                    .accessible_name("Symbol search");
+                widgets::section(ui, "03", "Capture sequence");
+                widgets::text_field(ui, &mut self.search, "Search nebulae, galaxies or clusters…")
+                    .accessible_name("Target search");
                 ui.horizontal(|ui| {
-                    widgets::switch_labeled(ui, &mut self.switch, "Enable agent");
-                    ui.label(if self.switch { "Agent on" } else { "Agent off" });
+                    widgets::switch_labeled(ui, &mut self.switch, "Sidereal tracking");
+                    ui.label(if self.switch { "Tracking on" } else { "Tracking paused" });
                 });
                 ui.horizontal(|ui| {
-                    let label = ui.label("Effort");
-                    widgets::notches_labeled(ui, 160.0, EFFORTS.len(), &mut self.effort, "Effort")
+                    let label = ui.label("Exposure");
+                    widgets::notches_labeled(ui, 160.0, EXPOSURES.len(), &mut self.exposure, "Exposure duration")
                         .labelled_by(label.id);
-                    ui.label(EFFORTS[self.effort]);
+                    ui.label(EXPOSURES[self.exposure]);
                 });
                 ui.add_space(8.0);
-                widgets::section(ui, "04", "Tabs");
-                widgets::tabs(ui, &mut self.tab, &["Agent", "Manual", "Room"]);
-                widgets::segmented(ui, &mut self.timeframe, &["M5", "H1", "D1"]);
+                widgets::section(ui, "04", "Imaging workflow");
+                widgets::tabs(ui, &mut self.capture_mode, &["Capture", "Calibration", "Review"]);
+                widgets::segmented(ui, &mut self.filter, &["Luminance", "Red", "Green", "Blue"]);
+                ui.add_space(8.0);
+                widgets::caption(ui, "Choose a filter and exposure for your sample sequence.");
             });
         });
     }
@@ -276,10 +363,10 @@ impl Gallery {
 
         let chat = &mut self.chats[self.active];
         if chat.entries.is_empty() {
-            let starters = ["Show me the widgets", "What does a theme hold?"];
-            let hint = "A canned demo chat: replies are scripted and nothing is sent anywhere.";
+            let starters = ["Plan a deep-sky session", "Help me choose a target"];
+            let hint = "Explore targets, plan exposures and keep observing notes. Demo replies stay on this device.";
             if let Some(i) =
-                transcript::empty_state(ui, layout.body, Some(logo), "What should we build?", hint, &starters)
+                transcript::empty_state(ui, layout.body, Some(logo), "Where shall we look?", hint, &starters)
             {
                 starters[i].clone_into(&mut chat.draft);
                 chat.send();
@@ -303,9 +390,9 @@ impl Gallery {
             ui,
             layout.composer,
             |ui| {
-                let model = widgets::dropdown(ui, Some(Tone::Positive), "Gallery · Scripted", 150.0)
-                    .accessible_name("Model: Gallery · Scripted");
-                egui::Popup::menu(&model).show(|ui| ui.label("Apps list their models here."));
+                let model = widgets::dropdown(ui, Some(Tone::Positive), "Sky guide · Demo", 150.0)
+                    .accessible_name("Assistant: Sky guide demo");
+                egui::Popup::menu(&model).show(|ui| ui.label("Local demonstration · scripted observing notes"));
                 let level = widgets::dropdown(ui, None, EFFORTS[effort], 100.0)
                     .accessible_name(format!("Reasoning effort: {}", EFFORTS[effort]));
                 egui::Popup::menu(&level).show(|ui| {
@@ -328,16 +415,16 @@ fn show_entry(ui: &mut egui::Ui, entry: &mut Entry, logo: Svg) {
     match entry {
         Entry::User(text) => transcript::user_bubble(ui, text, "now"),
         Entry::Reply { text, thinking, steps, open } => {
-            transcript::byline(ui, Some(logo), "Gallery · canned reply");
+            transcript::byline(ui, Some(logo), "Sky guide · observing assistant");
             if transcript::thinking(ui, thinking, false, 2.0, *open) {
                 *open = !*open;
             }
             for (i, (title, detail)) in steps.iter().enumerate() {
                 let step = transcript::Step {
-                    icon: Icon::Wrench,
+                    icon: Icon::Star,
                     title,
                     detail,
-                    time: "09:41",
+                    time: "21:30",
                     status: transcript::StepStatus::Done,
                 };
                 step.show(ui, i > 0, i + 1 < steps.len());
@@ -423,9 +510,9 @@ impl eframe::App for Gallery {
         }
         let theme_name = Theme::of(&ctx).name;
         let mut toggle = false;
-        let shell = Shell::new("SpaceUI").logo(LOGO).rail(RAIL).status_bar(22.0).title_status(|ui| {
+        let shell = Shell::new("Observatory").logo(LOGO).rail(RAIL).status_bar(22.0).title_status(|ui| {
             toggle = widgets::pill(ui, Some(Tone::Accent), theme_name).on_hover_text("Switch theme").clicked();
-            widgets::badge(ui, Icon::Shield, "Demo data", Tone::Positive);
+            widgets::badge(ui, Icon::Star, "Demo session", Tone::Positive);
         });
         let range = 330.0..=600.0;
         let shell = if self.chat_side == 0 {
@@ -450,7 +537,7 @@ impl eframe::App for Gallery {
         if let Some(status) = regions.status {
             let muted = Theme::of(&ctx).palette.muted;
             let font = egui::FontId::proportional(11.0);
-            let text = "SpaceUI gallery · canned data only";
+            let text = "OBSERVATORY  /  SpaceUI example  ·  Illustrative sky and conditions  ·  No equipment connected";
             ui.painter().text(status.left_center(), egui::Align2::LEFT_CENTER, text, font, muted);
         }
         if let Some(shot) = &mut self.screenshot
@@ -462,5 +549,32 @@ impl eframe::App for Gallery {
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         Theme::default().palette.bg_bottom.to_normalized_gamma_f32()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_gallery_page_renders_with_portable_bundled_fonts() {
+        let ctx = egui::Context::default();
+        let mut gallery = Gallery::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+        gallery.screenshot = None;
+        let mut frame = eframe::Frame::_new_kittest();
+        for deep_space in [false, true] {
+            let base = if deep_space { Theme::deep_space() } else { Theme::carbon_copper() };
+            Theme { fonts: Fonts::BUNDLED, ..base }.install(&ctx);
+            gallery.deep_space = deep_space;
+            gallery.installed = Some(deep_space);
+            for page in 0..PAGES.len() {
+                gallery.page = page;
+                let input = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1480.0, 920.0))),
+                    ..Default::default()
+                };
+                ctx.run_ui(input, |ui| eframe::App::ui(&mut gallery, ui, &mut frame)).drop_without_applying_deltas();
+            }
+        }
     }
 }
