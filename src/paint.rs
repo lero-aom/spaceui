@@ -283,7 +283,7 @@ mod tests {
                 let mesh = polygon_mesh(&points, 1.0, |_| Color32::WHITE);
                 assert_eq!(mesh.vertices.len(), original.vertices.len());
                 assert_eq!(mesh.indices.len(), original.indices.len());
-                for pair in mesh.vertices[1..].chunks_exact(2) {
+                for pair in mesh.vertices[1..].as_chunks::<2>().0 {
                     let inner = pair[0].pos - translation;
                     let outer = pair[1].pos - translation;
                     assert!((inner - pos2(0.5, 0.5)).length() < (outer - pos2(0.5, 0.5)).length());
