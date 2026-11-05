@@ -10,7 +10,7 @@ use egui::{
     StrokeKind, Ui, UiBuilder, Vec2, WidgetInfo, pos2, vec2,
 };
 
-/// The owner's message, right-aligned in a bubble with inline Markdown;
+/// The owner's message, right-aligned in a bubble rendered as `CommonMark`;
 /// `hover` (a time, say) shows beside it on hover.
 pub fn user_bubble(ui: &mut Ui, text: &str, hover: &str) {
     if ui.available_width() < 32.0 {
@@ -19,15 +19,20 @@ pub fn user_bubble(ui: &mut Ui, text: &str, hover: &str) {
     let p = Theme::of(ui.ctx()).palette;
     ui.add_space(10.0);
     let max_width = ui.available_width() * 0.84;
-    let mut job = markdown::inline_job(text, &FontId::proportional(14.0), p.text, &p);
-    job.wrap.max_width = (max_width - 28.0).max(1.0);
-    let galley = ui.fonts_mut(|f| f.layout_job(job));
-    let size = galley.size() + vec2(28.0, 18.0);
-    let (row, response) = ui.allocate_exact_size(vec2(ui.available_width(), size.y), Sense::hover());
-    let bubble = Rect::from_min_size(pos2(row.right() - size.x, row.top()), size);
-    ui.painter().rect(bubble, 16.0, p.bubble, Stroke::new(1.0, p.accent.gamma_multiply(0.25)), StrokeKind::Inside);
-    ui.put(bubble.shrink2(vec2(14.0, 9.0)), Label::new(galley).selectable(true));
-    if response.hovered() && !hover.is_empty() {
+    let response = ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
+        Frame::new()
+            .fill(p.bubble)
+            .stroke(Stroke::new(1.0, p.accent.gamma_multiply(0.25)))
+            .corner_radius(16)
+            .inner_margin(Margin::symmetric(14, 9))
+            .show(ui, |ui| {
+                ui.set_max_width((max_width - 30.0).max(1.0));
+                ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| markdown::render(ui, text));
+            })
+            .response
+    });
+    let bubble = response.inner.rect;
+    if response.response.hovered() && !hover.is_empty() {
         let at = pos2(bubble.left() - 8.0, bubble.center().y);
         ui.painter().text(at, Align2::RIGHT_CENTER, hover, FontId::proportional(11.5), p.muted);
     }
@@ -35,7 +40,7 @@ pub fn user_bubble(ui: &mut Ui, text: &str, hover: &str) {
 }
 
 /// Who answered: a small logo and a muted label ("Claude · Opus · high").
-pub fn byline(ui: &mut Ui, logo: Option<Svg>, label: &str) {
+pub fn byline(ui: &mut Ui, logo: Option<Svg<'_>>, label: &str) {
     let p = Theme::of(ui.ctx()).palette;
     ui.add_space(8.0);
     ui.horizontal(|ui| {
@@ -254,7 +259,7 @@ pub fn notice(ui: &mut Ui, text: &str, error: bool) {
 pub fn empty_state(
     ui: &mut Ui,
     rect: Rect,
-    logo: Option<Svg>,
+    logo: Option<Svg<'_>>,
     headline: &str,
     hint: &str,
     starters: &[&str],

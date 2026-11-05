@@ -37,7 +37,7 @@ fn controls_across_themes_sizes_and_pixel_densities() {
                 let mut selected = 0;
                 let mut text = "Editable text".to_owned();
                 let mut harness = Harness::builder()
-                    .with_size(egui::vec2(width as f32, 520.0))
+                    .with_size(egui::vec2(width as f32, 600.0))
                     .with_pixels_per_point(density as f32)
                     .with_context_setup(move |ctx| {
                         setup(deep).install(ctx);

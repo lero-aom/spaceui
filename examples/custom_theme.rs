@@ -35,7 +35,8 @@ struct App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        const RAIL: &[RailItem] = &[RailItem::page(Icon::Orbit, "Sky"), RailItem::page(Icon::Camera, "Imaging")];
+        const RAIL: &[RailItem<'static>] =
+            &[RailItem::page(Icon::Orbit, "Sky"), RailItem::page(Icon::Camera, "Imaging")];
         let regions = Shell::new("Lunar Observatory").logo(Icon::Orbit.svg()).rail(RAIL).show(ui, &mut self.page);
         ui.scope_builder(egui::UiBuilder::new().max_rect(regions.main), |ui| {
             ui.heading(if self.page == 0 { "A moonlit view of the sky" } else { "Imaging sequence" });

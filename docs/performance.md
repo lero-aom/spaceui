@@ -1,10 +1,15 @@
 # Performance measurements
 
+The historical measurements below predate the `egui_commonmark` migration and describe the removed custom parser.
+The current benchmarks render CommonMark frames, including the malformed-input and allocation workloads;
+their results cannot be compared directly with the former parser-only measurements.
+
 Run the timing and allocation workloads separately:
 
 ```sh
 cargo bench --locked --bench workloads --all-features
 cargo bench --locked --bench allocations --all-features
+cargo bench --locked --bench svg_resize --all-features
 ```
 
 `workloads` warms each case, then reports median and p95 wall-clock time. UI
@@ -78,6 +83,58 @@ not a controlled speed comparison with the earlier baseline:
 | SVG rasterization, 64 pixels | 53.2 us | 78.2 us |
 | Cached SVG frame | 3.4 us | 3.6 us |
 | Gradient mesh, 2x pixel density | 5.3 us | 5.8 us |
+
+## CommonMark migration smoke run
+
+On 2026-11-05, Windows, Rust 1.97.1, optimized bench profile, the updated workloads completed with:
+
+| CPU workload | Median | p95 |
+|---|---:|---:|
+| 100-message CommonMark frame | 2,900.3 us | 4,716.4 us |
+| 16 KiB unmatched brackets, including layout | 26,183.5 us | 45,081.5 us |
+| SVG rasterization, 64 pixels | 55.2 us | 111.3 us |
+| Cached SVG frame | 5.7 us | 6.5 us |
+
+These are smoke measurements taken while other validation builds ran on the same machine, not a controlled
+comparison. The malformed-input workload now includes font layout and rendering; the former workload only
+parsed inline markup. The allocation workload now renders 100 actual paragraphs, recording 3,042 allocations,
+7 reallocations and 508,461 requested bytes per frame. Cached SVG and button allocation counts remain at
+20 and 24 per frame. SVG cache retention remains bounded and clearing reports zero retained bytes.
+
+## Parsed SVG reuse and resize workload
+
+Recorded 2026-11-05 on Windows, AMD Ryzen 9 5950X, Rust 1.97.1, optimized bench profile, with no concurrent
+validation builds. The same `svg_resize` workload ran immediately before and after parsed-document reuse.
+Every measured frame uses a new square raster size: 32–231 pixels for one icon/the gallery logo (200 frames),
+and 32–111 pixels for all 70 icons (80 frames). One initial frame warms egui and the documents. The cold
+variant clears the entire SVG cache before each timed frame; the resize variant retains it. Timings include
+CPU parsing, rasterization, texture-delta creation and egui frame construction, but exclude GPU uploads,
+drawing and a native event loop. Assets overlap intentionally so only their creation costs are measured.
+
+| Workload | Before median / p95 | After median / p95 |
+|---|---:|---:|
+| One icon, cold | 146.2 / 264.3 us | 132.6 / 239.2 us |
+| One icon, resize | 137.4 / 277.4 us | 129.9 / 238.6 us |
+| 70 icons, cold | 4,208.4 / 6,048.7 us | 4,087.6 / 6,023.7 us |
+| 70 icons, resize | 5,038.6 / 7,154.6 us | 3,194.6 / 4,496.9 us |
+| Gallery logo, cold | 356.7 / 641.0 us | 338.0 / 647.4 us |
+| Gallery logo, resize | 348.1 / 637.8 us | 287.2 / 560.1 us |
+
+The 70-icon resize median improved by about 37% in this run. Its maximum was 4,840.3 us after versus
+8,144.1 us before. The cold results illustrate measurement variation and the cost that remains when documents
+cannot be reused. These simple assets do not establish performance for arbitrary downloaded SVGs, filters,
+embedded images, or larger rasters. Parsing and rasterization still run synchronously, without a latency bound.
+
+After the 70-icon resize run the cache retained 256 raster entries (12,310,736 RGBA bytes), 70 parsed
+documents and 20,754 source bytes. The document cache is limited to 128 documents and 4 MiB of source text;
+the byte figure excludes parsed-tree allocations. Texture retention remains limited to 32 MiB. Tests cover
+both eviction policies, parse failures, reuse after raster eviction, runtime source mutation and clearing.
+Sources exceeding the source budget bypass retention. Applications accepting untrusted documents must
+still constrain source length and complexity; bounded cache counts do not imply bounded process memory.
+
+The separate allocation benchmark still reports 20 allocations, zero reallocations and 8,846 requested
+bytes per cached SVG frame, matching the previous implementation. Clearing the cache resets texture,
+document and source-byte counts to zero.
 
 ## Compare changes
 

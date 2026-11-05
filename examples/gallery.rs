@@ -15,10 +15,10 @@ use spaceui::prelude::*;
 #[path = "gallery/sky.rs"]
 mod sky;
 
-const LOGO: Svg = Svg::new("gallery/spaceui", include_str!("assets/spaceui.svg"));
+const LOGO: Svg<'static> = Svg::new("gallery/spaceui", include_str!("assets/spaceui.svg"));
 const HINT: &str = "Ask about targets or your observing plan…";
 const PAGES: [&str; 4] = ["Tonight's sky", "Observatory", "Palette and icons", "Preferences"];
-const RAIL: &[RailItem] = &[
+const RAIL: &[RailItem<'static>] = &[
     RailItem::page(Icon::Orbit, PAGES[0]),
     RailItem::page(Icon::Camera, PAGES[1]),
     RailItem::page(Icon::Palette, PAGES[2]),
@@ -483,7 +483,7 @@ fn status_divider(ui: &mut egui::Ui) {
     ui.painter().vline(rect.center().x, rect.y_range(), egui::Stroke::new(1.0, border));
 }
 
-fn show_entry(ui: &mut egui::Ui, entry: &mut Entry, logo: Svg) {
+fn show_entry(ui: &mut egui::Ui, entry: &mut Entry, logo: Svg<'_>) {
     match entry {
         Entry::User(text) => transcript::user_bubble(ui, text, "now"),
         Entry::Reply { text, thinking, steps, open } => {

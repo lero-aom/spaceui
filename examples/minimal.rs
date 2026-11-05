@@ -7,7 +7,7 @@
 use spaceui::egui;
 use spaceui::prelude::*;
 
-const RAIL: &[RailItem] = &[
+const RAIL: &[RailItem<'static>] = &[
     RailItem::page(Icon::Orbit, "Sky"),
     RailItem::page(Icon::Star, "Targets"),
     RailItem::Divider,

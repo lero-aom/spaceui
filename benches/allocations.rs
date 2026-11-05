@@ -1,7 +1,7 @@
 //! Allocation measurements are separate from timing to avoid instrumentation bias.
 use spaceui::{Fonts, Icon, Theme, art, chat::markdown, egui, widgets};
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
-use std::{alloc::System, hint::black_box};
+use std::alloc::System;
 
 #[global_allocator]
 static ALLOCATOR: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
@@ -43,14 +43,9 @@ fn main() {
         })
         .drop_without_applying_deltas();
     });
-    let text = "A **formatted** paragraph with [a link](https://example.com). ".repeat(100);
-    profile("100-paragraph inline parse", || {
-        black_box(markdown::inline_job(
-            &text,
-            &egui::FontId::proportional(14.0),
-            egui::Color32::WHITE,
-            &Theme::default().palette,
-        ));
+    let text = "A **formatted** paragraph with [a link](https://example.com).\n\n".repeat(100);
+    profile("100-paragraph CommonMark frame", || {
+        ctx.run_ui(egui::RawInput::default(), |ui| markdown::render(ui, &text)).drop_without_applying_deltas();
     });
     for px in 16..400 {
         ctx.run_ui(egui::RawInput::default(), |ui| {

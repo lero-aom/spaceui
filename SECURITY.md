@@ -19,8 +19,10 @@ is currently promised.
 ## Scope and checks
 
 SpaceUI renders UI; applications own network requests, authorization, storage, file access and AI backends.
-Raw HTML in the compact Markdown renderer is not executed. Link destinations still lead to external content;
-an application is responsible for its own navigation policy. Review untrusted text and assets at the application boundary.
+Raw HTML is displayed as text by the `egui_commonmark` integration. SpaceUI does not enable file or network
+image loaders; applications choose which loaders to install. Link destinations use egui's navigation behavior,
+including non-HTTP schemes; applications own their navigation policy through link hooks or output-command
+filtering. Review untrusted text and assets at the application boundary.
 
 Dependency CI checks RustSec advisories, yanked versions, licenses and sources on changes and weekly.
 Checks can identify known issues; they are not a security audit. Exceptions require a specific justification

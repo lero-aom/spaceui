@@ -13,7 +13,7 @@ pub(super) fn show(
     ctx: &Context,
     window: Rect,
     title: &str,
-    logo: Option<Svg>,
+    logo: Option<Svg<'_>>,
     status: Option<TitleStatus<'_>>,
     labels: &WindowLabels<'_>,
 ) {
@@ -60,7 +60,7 @@ fn drag_to_move(ui: &Ui, rect: Rect, title: &str, description: &str) {
 }
 
 /// The logo (with a soft accent glow) and the title; returns the title's right edge.
-fn brand(ui: &Ui, rect: Rect, title: &str, logo: Option<Svg>) -> f32 {
+fn brand(ui: &Ui, rect: Rect, title: &str, logo: Option<Svg<'_>>) -> f32 {
     let p = Theme::of(ui.ctx()).palette;
     let right = rect.right() - 3.0 * button_width(rect) - 12.0;
     if right <= rect.left() {

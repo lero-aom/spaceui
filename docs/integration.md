@@ -46,27 +46,63 @@ Use labeled switch and notch-slider helpers to give application-specific names t
 Keyboard focus and activation are part of the control contract, but the application must keep a coherent
 focus order, name surrounding regions and test its backend's screen-reader bridge.
 
+`Svg<'a>` and `RailItem<'a>` borrow strings for the call, including runtime-generated SVGs and translated
+rail labels. Rebuild rail items from the current labels each frame; their positional IDs preserve focus
+when labels change. Static declarations should spell the lifetime explicitly, for example
+`const LOGO: Svg<'static>` and `const RAIL: &[RailItem<'static>]`. SVG painting owns any source text retained
+by the cache and keys it by content, so editing or dropping the caller's string cannot leave a stale image.
+
+The Composer returns actions without clearing the caller's draft. A nonempty, non-whitespace draft sends
+on a fresh Enter press while the editor retains focus through the call; held-key repeats do not send.
+Shift+Enter inserts a newline using the key event's modifiers. An IME preedit or commit frame does not
+submit, and a later explicit Enter can submit the committed text. Requesting focus cannot submit an event
+from another field. Busy state blocks sending; the stop button returns only `stop` when busy and stoppable.
+A disabled Composer returns neither action. Applications still own when to clear the draft or mark a request
+busy, and must give each Composer a stable ID. Sequence tests cover these combinations and transitions;
+native IME/backend integration also needs application testing.
+
 ## Markdown and external content
 
-The chat renderer intentionally supports a compact subset: headings, simple lists, quotes, rules, fenced
-code, table-like rows and inline formatting/links. It is not a CommonMark implementation. It does not provide
-HTML execution, images, reference links, nested lists, syntax highlighting or aligned table columns. Simple
-inline destinations cannot contain nested parentheses; unmatched delimiters remain literal and backslash-
-escaped punctuation is displayed as punctuation without the escape backslash.
-Only HTTP(S) destinations activate as links. Applications that require a complete Markdown standard should
-choose a parser and renderer for that contract.
+Replies and user bubbles use `egui_commonmark` 0.26 (egui 0.37), including nested lists, reference links,
+tables and fenced code with basic syntax highlighting. `chat::markdown::render` keeps the familiar
+two-argument API and a shared per-context `CommonMarkCache`; `clear_cache` releases that cache.
+`render_with_cache` accepts an application-owned cache for link hooks and explicit lifetime management.
+The upstream `CommonMarkCache` and `CommonMarkViewer` types are re-exported for further customization.
+
+The former `inline_job` API has been removed: CommonMark is rendered as widgets, not reduced to a single
+text layout job. Migrate custom bubbles to `render` or `render_with_cache` inside a constrained egui UI.
+User bubbles now support block Markdown as well as inline formatting.
+
+The upstream code-block copy button uses the Unicode symbol U+1F5D0. Install a symbol font if needed;
+egui's bundled fonts alone render its fallback box. With egui's strict missing-glyph policy, supply the
+font or use the normal `MissingGlyphPolicy::Tofu` policy for arbitrary Markdown content.
+
+HTML is displayed as text. Images use loaders installed in the egui context; SpaceUI disables the
+dependency's default features and does not enable file or network loaders. Consumers can opt into those
+through `egui_extras` or `egui_commonmark` features. Links follow upstream egui navigation behavior,
+including schemes beyond HTTP(S); use cache link hooks or filter egui output commands for an application's
+navigation policy. The old renderer's HTTP(S)-only restriction no longer applies.
 
 Use `Svg::try_paint`, `Svg::try_rasterize` and `Svg::try_window_icon` when invalid art must be diagnosed;
 they preserve a `SvgError` rather than silently omitting an icon. Explicit rasterization accepts dimensions
-from 1 through `art::MAX_RASTER_SIZE` (2048 pixels). Painting caps raster resolution at that size. Larger
+from 1 through `art::MAX_RASTER_SIZE` (2048 pixels). Painting caps raster resolution at that size while
+preserving the destination's aspect ratio. Painting fits and centers the SVG inside the destination;
+square raster and window-icon exports likewise center non-square artwork with transparent padding. Larger
 exports need a separate rasterizer or tiled pipeline. Parsing is synchronous: the raster limit does not bound
 the complexity of an SVG document, so an application accepting untrusted art must also limit its input.
 
-The per-context cache retains at most 256 entries and 32 MiB of RGBA texture data. These limits exclude
-renderer overhead, parsing intermediates and texture handles retained elsewhere by the application. Use
-`art::cache_stats` and `art::clear_cache` to inspect or release it. Different documents may share a diagnostic
-name without sharing a cached texture. `Screenshot::try_update` preserves a typed `ScreenshotError` and its
-underlying cause; the existing `update` helper retains its string-error interface.
+The per-context cache retains at most 256 raster entries and 32 MiB of RGBA texture data, plus 128 parsed
+documents and 4 MiB of source text. Parsed documents, including parse failures, are reused across sizes.
+Evicting a document also removes its textures; sources larger than 4 MiB render without cache retention.
+The source-byte budget does not measure or bound parsed-tree allocations. These limits exclude renderer
+overhead, parsing intermediates and texture handles retained elsewhere by the application, and are not a
+total-process memory or latency bound. Use `art::cache_stats` and `art::clear_cache` to inspect or release
+both caches. Different documents may share a diagnostic name without sharing a cached texture; identical
+content shares an entry regardless of its name. Standalone raster/window-icon exports do not use this cache.
+See [performance.md](performance.md) for measured resize costs and workload limits.
+
+`Screenshot::try_update` preserves a typed `ScreenshotError` and its underlying cause; the existing
+`update` helper retains its string-error interface.
 
 ## Diagnosing a problem
 

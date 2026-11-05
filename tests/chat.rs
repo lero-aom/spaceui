@@ -1,6 +1,8 @@
 //! The chat kit's tab strip and composer, driven headlessly.
 #![cfg(feature = "chat")]
 mod common;
+#[path = "chat/composer_sequences.rs"]
+mod composer_sequences;
 
 use common::Harness;
 use spaceui::chat::{self, ChatLayout, Composer, ComposerResponse, Tab, TabAction};
@@ -251,6 +253,73 @@ fn markdown_links_are_named_and_keyboard_activatable() {
     harness.get_by_label("wiki").click_accesskit();
     harness.run();
     assert!(*harness.state(), "assistive technology can activate the link");
+}
+
+#[test]
+fn commonmark_reference_links_work_in_replies_and_user_bubbles() {
+    use egui_kittest::kittest::Queryable as _;
+    type Render = fn(&mut spaceui::egui::Ui, &str);
+    let renderers: [Render; 3] = [
+        chat::markdown::render,
+        |ui, text| chat::transcript::reply(ui, text, false),
+        |ui, text| chat::transcript::user_bubble(ui, text, ""),
+    ];
+    for render in renderers {
+        let mut harness = egui_kittest::Harness::new_ui_state(
+            move |ui, opened| {
+                render(ui, "[Reference][guide]\n\n[guide]: https://example.org/a_(b)");
+                *opened |= ui.ctx().output(|output| output.commands.iter().any(|command| {
+                    matches!(command, spaceui::egui::OutputCommand::OpenUrl(url) if url.url == "https://example.org/a_(b)")
+                }));
+            },
+            false,
+        );
+        harness.get_by_label("Reference").click();
+        harness.run();
+        assert!(*harness.state());
+    }
+}
+
+#[test]
+fn commonmark_renders_nested_lists_tables_and_changing_streamed_content() {
+    use egui_kittest::kittest::Queryable as _;
+    let mut harness = egui_kittest::Harness::builder()
+        // The upstream code toolbar uses a copy symbol absent from bundled fonts.
+        .allow_missing_glyphs()
+        .build_ui_state(
+            |ui, text: &mut String| chat::markdown::render(ui, text),
+            "- Parent\n  - Nested\n\n| Name | Value |\n| --- | --- |\n| Galaxy | M31 |\n\n```rust\nlet x = 1;"
+                .to_owned(),
+        );
+    for label in ["Parent", "Nested", "Name", "Value", "Galaxy", "M31"] {
+        harness.get_by_label(label);
+    }
+    *harness.state_mut() = "A completed **reply** with [Final](https://example.org).".to_owned();
+    harness.run();
+    harness.get_by_label("Final");
+    chat::markdown::clear_cache(&harness.ctx);
+    harness.run();
+    harness.get_by_label("Final");
+}
+
+#[test]
+fn commonmark_application_owned_cache_keeps_link_hooks() {
+    use egui_kittest::kittest::Queryable as _;
+    let mut cache = chat::markdown::CommonMarkCache::default();
+    cache.add_link_hook("app://details");
+    let mut harness = egui_kittest::Harness::new_ui_state(
+        |ui, state: &mut (chat::markdown::CommonMarkCache, bool)| {
+            chat::markdown::render_with_cache(ui, &mut state.0, "[Details](app://details)");
+            state.1 |= state.0.get_link_hook("app://details") == Some(true);
+            assert!(!ui.ctx().output(|output| output.commands.iter().any(|command| {
+                matches!(command, spaceui::egui::OutputCommand::OpenUrl(url) if url.url == "app://details")
+            })));
+        },
+        (cache, false),
+    );
+    harness.get_by_label("Details").click();
+    harness.run();
+    assert!(harness.state().1);
 }
 
 #[test]

@@ -6,6 +6,33 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-05
+
+Requires Rust 1.95 and integrates with egui 0.37. This minor release changes public APIs;
+follow the migration notes below when upgrading from 0.1.
+
+### Changed
+
+- Replace the custom Markdown parser, layout and link handling with `egui_commonmark` 0.26 for replies
+  and user bubbles. Nested lists, reference links, tables and basic code highlighting use upstream rendering.
+- **Breaking:** remove `chat::markdown::inline_job`. Use `render` or the new `render_with_cache` inside
+  a constrained UI. `CommonMarkCache` and `CommonMarkViewer` are re-exported; `clear_cache` releases
+  the shared context cache. Links now follow egui navigation behavior instead of an HTTP(S)-only filter.
+- Update Markdown benchmarks and fuzzing to exercise the CommonMark integration.
+- **Breaking:** `Svg<'a>` and `RailItem<'a>` accept borrowed runtime strings. Use explicit `'static`
+  lifetimes in constant/type declarations. SVG cache identity uses source content instead of storage identity.
+- Reuse parsed SVG documents across raster sizes. Retain at most 128 documents and 4 MiB of source text
+  alongside the existing texture budget; document eviction also releases its textures. Parsed-tree memory
+  is not included in the byte budget. `CacheStats` adds `documents` and `source_bytes` fields.
+- Add cold/resize SVG frame benchmarks and Composer input-sequence tests covering the send/stop state matrix.
+
+### Fixed
+
+- Non-square SVGs now retain their aspect ratio and are centered when painted into rectangular destinations.
+  Texture dimensions, cache keys and memory accounting use both axes. Square exports center the artwork.
+- Composer ignores held Enter repeats, Enter when focus changes, and Enter during IME preedit/commit.
+  A later fresh Enter can send the draft; disabled, busy and stoppable states retain their action contracts.
+
 ## [0.1.0] - 2026-11-04
 
 First public release. Requires Rust 1.95 and integrates with egui 0.37.
@@ -70,5 +97,6 @@ The first release includes these fixes from development and review:
 - Astronomy examples use illustrative data; they do not calculate live sky positions, connect to hardware
   or call an AI service.
 
-[Unreleased]: https://github.com/lero-aom/spaceui/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lero-aom/spaceui/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lero-aom/spaceui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lero-aom/spaceui/tree/v0.1.0

@@ -1,9 +1,9 @@
 use super::ChatLabels;
 use crate::{Icon, Theme, paint, theme::Palette};
 use egui::{
-    Align, Color32, CursorIcon, Event, FontId, Frame, Id, Key, KeyboardShortcut, Layout, Modifiers, Rect, Response,
-    RichText, Role, ScrollArea, Sense, Spinner, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2, WidgetInfo, pos2,
-    vec2,
+    Align, Color32, CursorIcon, Event, FontId, Frame, Id, ImeEvent, Key, KeyboardShortcut, Layout, Modifiers, Rect,
+    Response, RichText, Role, ScrollArea, Sense, Spinner, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2,
+    WidgetInfo, pos2, vec2,
 };
 
 const FONT_SIZE: f32 = 14.0;
@@ -19,6 +19,10 @@ const ROW_HEIGHT: f32 = 38.0;
 /// Enter sends and Shift+Enter starts a new line. While [`busy`](Self::busy),
 /// the button stops the running reply (or shows a spinner, if it can't be
 /// stopped). Measure first with [`Composer::measure`] to lay out the column.
+/// Held-key repeats do not send. Keyboard submission requires the draft to
+/// retain focus through input handling; IME preedit and commit frames do not
+/// submit. Disabled composers emit neither action. The app owns the draft and
+/// should take it or set `busy` when accepting a send request.
 #[derive(Debug)]
 #[must_use = "a composer does nothing until `show` is called"]
 pub struct Composer<'a> {
@@ -132,16 +136,8 @@ impl<'a> Composer<'a> {
                 )
             })
             .inner;
-        let enter = ui.is_enabled()
-            && (edit.has_focus() || edit.lost_focus())
-            && ui.input(|i| {
-                // Modifiers can change again before the frame is processed.
-                // Use the Enter event's state so releasing Shift cannot send
-                // a draft after inserting a newline in the same frame.
-                i.events.iter().any(|event| {
-                    matches!(event, Event::Key { key: Key::Enter, pressed: true, modifiers, .. } if !modifiers.shift)
-                })
-            });
+        let ime_blocks_send = composition_blocks_send(ui, input_id, focused && edit.has_focus());
+        let enter = ui.is_enabled() && focused && edit.has_focus() && consume_send_key(ui) && !ime_blocks_send;
         let has_text = !self.draft.trim().is_empty();
 
         let row = Rect::from_min_max(
@@ -175,8 +171,11 @@ impl<'a> Composer<'a> {
                 }
                 return;
             }
-            let response =
-                ui.add_enabled_ui(self.busy || has_text, |ui| send_button(ui, &p, self.busy, &self.labels)).inner;
+            let response = ui
+                .add_enabled_ui(self.busy || (has_text && !ime_blocks_send), |ui| {
+                    send_button(ui, &p, self.busy, &self.labels)
+                })
+                .inner;
             if response.clicked() {
                 if self.busy {
                     out.stop = true;
@@ -194,6 +193,52 @@ impl<'a> Composer<'a> {
         }
         out
     }
+}
+
+/// Consume Enter presses, including repeats, but only report a fresh press.
+fn consume_send_key(ui: &Ui) -> bool {
+    ui.input_mut(|input| {
+        let mut pressed = false;
+        input.events.retain(|event| {
+            // Use the event's modifiers: Shift may be released later in this frame.
+            if let Event::Key { key: Key::Enter, pressed: true, repeat, modifiers, .. } = event
+                && !modifiers.shift
+            {
+                pressed |= !repeat;
+                return false;
+            }
+            true
+        });
+        pressed
+    })
+}
+
+/// Track only composition ownership; egui still handles editing and cursor state.
+fn composition_blocks_send(ui: &Ui, input_id: Id, focused: bool) -> bool {
+    let state_id = input_id.with("composition");
+    let mut composing = ui.data_mut(|data| data.get_temp::<bool>(state_id).unwrap_or(false));
+    if !focused || !ui.is_enabled() {
+        ui.data_mut(|data| data.remove::<bool>(state_id));
+        return false;
+    }
+    let mut blocked = composing;
+    ui.input(|input| {
+        for event in &input.events {
+            match event {
+                Event::Ime(ImeEvent::Preedit { text, .. }) => {
+                    composing = !text.is_empty();
+                    blocked |= composing;
+                }
+                Event::Ime(ImeEvent::Commit(text)) => {
+                    blocked |= !text.is_empty();
+                    composing = false;
+                }
+                _ => {}
+            }
+        }
+    });
+    ui.data_mut(|data| data.insert_temp(state_id, composing));
+    blocked
 }
 
 /// The round send (or stop) button: an accent gradient when it can act.

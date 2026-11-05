@@ -6,7 +6,7 @@ use egui::{
 };
 
 /// Icon tiles down the left edge; a clipped scroll area keeps overflow reachable.
-pub(super) fn show(ui: &mut Ui, rect: Rect, items: &[RailItem], page: &mut usize, enabled: bool) {
+pub(super) fn show(ui: &mut Ui, rect: Rect, items: &[RailItem<'_>], page: &mut usize, enabled: bool) {
     let count = items.iter().filter(|item| matches!(item, RailItem::Page { .. })).count();
     *page = (*page).min(count.saturating_sub(1));
     if !rect.is_positive() || count == 0 {
@@ -31,7 +31,7 @@ pub(super) fn show(ui: &mut Ui, rect: Rect, items: &[RailItem], page: &mut usize
         .show(&mut child, |ui| render(ui, items, page, group, rect.width()));
 }
 
-fn render(ui: &mut Ui, items: &[RailItem], page: &mut usize, group: Id, width: f32) {
+fn render(ui: &mut Ui, items: &[RailItem<'_>], page: &mut usize, group: Id, width: f32) {
     let theme = Theme::of(ui.ctx());
     let tile_size = finite_size(theme.metrics.tile).max(1.0).min(width);
     let origin = ui.max_rect().min;

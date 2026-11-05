@@ -2,13 +2,13 @@
 
 [![CI](https://github.com/lero-aom/spaceui/actions/workflows/ci.yml/badge.svg)](https://github.com/lero-aom/spaceui/actions/workflows/ci.yml)
 [![MSRV](https://img.shields.io/badge/MSRV-1.95-blue.svg)](#minimum-supported-rust-version)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/lero-aom/spaceui/blob/v0.1.0/LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/lero-aom/spaceui/blob/v0.2.0/LICENSE)
 
 A design system for [egui](https://github.com/emilk/egui) desktop apps: themes, anti-aliased painting, vector icons,
 widgets, a custom-window shell and a chat kit. Install a theme, show the shell and fill its regions; every part also
 works on its own.
 
-![The astronomy gallery in the Deep Space theme](https://raw.githubusercontent.com/lero-aom/spaceui/v0.1.0/docs/screenshots/deep-space.png)
+![The astronomy gallery in the Deep Space theme](https://raw.githubusercontent.com/lero-aom/spaceui/v0.2.0/docs/screenshots/deep-space.png)
 
 ## Highlights
 
@@ -25,24 +25,24 @@ works on its own.
 - **Plain data, plain functions.** Widgets are functions returning egui's `Response`; themes are structs. There is no
   framework to adopt.
 
-![The astronomy gallery in the Carbon / Copper theme](https://raw.githubusercontent.com/lero-aom/spaceui/v0.1.0/docs/screenshots/carbon-copper.png)
+![The astronomy gallery in the Carbon / Copper theme](https://raw.githubusercontent.com/lero-aom/spaceui/v0.2.0/docs/screenshots/carbon-copper.png)
 
 ## Getting started
 
 ```toml
 [dependencies]
-spaceui = "0.1"
+spaceui = "0.2"
 eframe = "0.37"
 ```
 
 A small observatory with a sky view, a target catalog and an observation-plan column
-([`examples/minimal.rs`](https://github.com/lero-aom/spaceui/blob/v0.1.0/examples/minimal.rs)):
+([`examples/minimal.rs`](https://github.com/lero-aom/spaceui/blob/v0.2.0/examples/minimal.rs)):
 
 ```rust,no_run
 use spaceui::egui;
 use spaceui::prelude::*;
 
-const RAIL: &[RailItem] = &[
+const RAIL: &[RailItem<'static>] = &[
     RailItem::page(Icon::Orbit, "Sky"),
     RailItem::page(Icon::Star, "Targets"),
     RailItem::Divider,
@@ -119,29 +119,33 @@ SpaceUI re-exports egui as `spaceui::egui`, so your app and SpaceUI always agree
 The default enables the complete desktop kit. For themes, painting and basic widgets only:
 
 ```toml
-spaceui = { version = "0.1", default-features = false }
+spaceui = { version = "0.2", default-features = false }
 ```
 
 | Feature | Adds |
 |---|---|
 | `svg` | SVG art, icons and controls that use them; enables `resvg` |
 | `shell` | The window shell and rail; enables `svg` |
-| `chat` | Chat components and the compact Markdown renderer; enables `svg` |
+| `chat` | Chat components and CommonMark rendering via `egui_commonmark`; enables `svg` |
 | `native` | Native window-handle integration; enables `raw-window-handle` |
 | `screenshot` | PNG screenshot runs; enables `svg` |
+
+Version 0.2 uses `egui_commonmark` and accepts runtime SVG sources and rail labels.
+See [the migration notes](https://github.com/lero-aom/spaceui/blob/v0.2.0/CHANGELOG.md#020---2026-11-05)
+before upgrading from 0.1.
 
 All five are enabled by default. For example, `default-features = false, features = ["chat"]` adds the
 chat kit without native window integration. Use `cargo doc --no-deps --no-default-features` to see the
 core API, or `cargo doc --no-deps --all-features` for everything. See the
-[integration guide](https://github.com/lero-aom/spaceui/blob/v0.1.0/docs/integration.md) for composition, accessibility and known limits.
+[integration guide](https://github.com/lero-aom/spaceui/blob/v0.2.0/docs/integration.md) for composition, accessibility and known limits.
 
 ## Examples
 
 | Example | Shows |
 |---|---|
-| [`minimal`](https://github.com/lero-aom/spaceui/blob/v0.1.0/examples/minimal.rs) | The observatory above: sky, targets and an observation plan |
-| [`custom_theme`](https://github.com/lero-aom/spaceui/blob/v0.1.0/examples/custom_theme.rs) | An astronomy app with a cool moonlit palette |
-| [`gallery`](https://github.com/lero-aom/spaceui/blob/v0.1.0/examples/gallery.rs) | An observing dashboard, instrument controls, palette and icons, and a scripted assistant |
+| [`minimal`](https://github.com/lero-aom/spaceui/blob/v0.2.0/examples/minimal.rs) | The observatory above: sky, targets and an observation plan |
+| [`custom_theme`](https://github.com/lero-aom/spaceui/blob/v0.2.0/examples/custom_theme.rs) | An astronomy app with a cool moonlit palette |
+| [`gallery`](https://github.com/lero-aom/spaceui/blob/v0.2.0/examples/gallery.rs) | An observing dashboard, instrument controls, palette and icons, and a scripted assistant |
 
 The examples use fixed illustrative targets and session data. They do not calculate live sky positions,
 connect to equipment or call an AI service.
@@ -150,7 +154,7 @@ connect to equipment or call an AI service.
 cargo run --example gallery
 ```
 
-![Instrument controls in the astronomy gallery](https://raw.githubusercontent.com/lero-aom/spaceui/v0.1.0/docs/screenshots/controls.png)
+![Instrument controls in the astronomy gallery](https://raw.githubusercontent.com/lero-aom/spaceui/v0.2.0/docs/screenshots/controls.png)
 
 ## Organisation
 
@@ -159,13 +163,13 @@ The modules build on each other, from colours to whole windows. `cargo doc --ope
 
 | Module | Holds |
 |---|---|
-| [`theme`](https://github.com/lero-aom/spaceui/blob/v0.1.0/src/theme/mod.rs) | `Theme`, `Palette`, `Metrics`, `Fonts`, `Backdrop`, and the font helpers `regular`, `semibold`, `mono` |
-| [`paint`](https://github.com/lero-aom/spaceui/blob/v0.1.0/src/paint.rs) | Anti-aliased gradients, polygon fills, glows and a sparkle glyph |
-| [`art`](https://github.com/lero-aom/spaceui/blob/v0.1.0/src/art/mod.rs) | The built-in `Icon` set (70 line icons) and your own `Svg` art, with window icons |
-| [`widgets`](https://github.com/lero-aom/spaceui/blob/v0.1.0/src/widgets/mod.rs) | Buttons, pills, badges, chips, tabs, segmented controls, cards, metrics, a switch, a field, a slider, and the `Tone` they take |
-| [`shell`](https://github.com/lero-aom/spaceui/blob/v0.1.0/src/shell/mod.rs) | The `Shell` builder (rail, left and right columns, status line), `RailItem` and the `Regions` it returns |
-| [`chat`](https://github.com/lero-aom/spaceui/blob/v0.1.0/src/chat/mod.rs) | `ChatLayout`, `tab_strip`, transcript pieces, `Composer` and a Markdown renderer |
-| [`window`](https://github.com/lero-aom/spaceui/blob/v0.1.0/src/window.rs) | An undecorated viewport, rounded corners on Windows 11 and screenshot runs |
+| [`theme`](https://github.com/lero-aom/spaceui/blob/v0.2.0/src/theme/mod.rs) | `Theme`, `Palette`, `Metrics`, `Fonts`, `Backdrop`, and the font helpers `regular`, `semibold`, `mono` |
+| [`paint`](https://github.com/lero-aom/spaceui/blob/v0.2.0/src/paint.rs) | Anti-aliased gradients, polygon fills, glows and a sparkle glyph |
+| [`art`](https://github.com/lero-aom/spaceui/blob/v0.2.0/src/art/mod.rs) | The built-in `Icon` set (70 line icons) and your own `Svg` art, with window icons |
+| [`widgets`](https://github.com/lero-aom/spaceui/blob/v0.2.0/src/widgets/mod.rs) | Buttons, pills, badges, chips, tabs, segmented controls, cards, metrics, a switch, a field, a slider, and the `Tone` they take |
+| [`shell`](https://github.com/lero-aom/spaceui/blob/v0.2.0/src/shell/mod.rs) | The `Shell` builder (rail, left and right columns, status line), `RailItem` and the `Regions` it returns |
+| [`chat`](https://github.com/lero-aom/spaceui/blob/v0.2.0/src/chat/mod.rs) | `ChatLayout`, `tab_strip`, transcript pieces, `Composer` and a Markdown renderer |
+| [`window`](https://github.com/lero-aom/spaceui/blob/v0.2.0/src/window.rs) | An undecorated viewport, rounded corners on Windows 11 and screenshot runs |
 
 ## Layout
 
@@ -174,7 +178,7 @@ Only the title bar and the main card are always there. Add what you need:
 ```rust,no_run
 # use spaceui::{Icon, RailItem, Shell};
 # fn ui(ui: &mut spaceui::egui::Ui, page: &mut usize, chat: &mut f32, outline: &mut f32) {
-# const RAIL: &[RailItem] = &[RailItem::page(Icon::Orbit, "Sky")];
+# const RAIL: &[RailItem<'static>] = &[RailItem::page(Icon::Orbit, "Sky")];
 let regions = Shell::new("Observatory")
     .rail(RAIL)                               // optional; without it the cards take the space
     .left_column(outline, 240.0..=400.0)      // optional
@@ -185,12 +189,12 @@ let regions = Shell::new("Observatory")
 # }
 ```
 
-![The observing assistant in a left column, in the Deep Space theme](https://raw.githubusercontent.com/lero-aom/spaceui/v0.1.0/docs/screenshots/chat-left.png)
+![The observing assistant in a left column, in the Deep Space theme](https://raw.githubusercontent.com/lero-aom/spaceui/v0.2.0/docs/screenshots/chat-left.png)
 
 ## Your own theme
 
 A theme is plain data: start from a built-in one and change what you need
-([`examples/custom_theme.rs`](https://github.com/lero-aom/spaceui/blob/v0.1.0/examples/custom_theme.rs)).
+([`examples/custom_theme.rs`](https://github.com/lero-aom/spaceui/blob/v0.2.0/examples/custom_theme.rs)).
 
 ```rust
 use spaceui::egui::Color32;
@@ -229,7 +233,7 @@ let fonts = Fonts {
 
 For a one-off colour, status widgets take `Tone::Custom(color)` next to the palette's tones.
 
-![Palette roles and the icon set](https://raw.githubusercontent.com/lero-aom/spaceui/v0.1.0/docs/screenshots/palette-and-icons.png)
+![Palette roles and the icon set](https://raw.githubusercontent.com/lero-aom/spaceui/v0.2.0/docs/screenshots/palette-and-icons.png)
 
 ## Checking your UI
 
@@ -247,9 +251,9 @@ SPACEUI_SCREENSHOT=deep-space.png SPACEUI_THEME=deep_space cargo run --example g
 SPACEUI_SCREENSHOT=carbon-copper.png SPACEUI_THEME=carbon_copper cargo run --example gallery
 ```
 
-SpaceUI's own tests drive the widgets headlessly with simulated clicks and key presses; see [`tests/`](https://github.com/lero-aom/spaceui/tree/v0.1.0/tests).
+SpaceUI's own tests drive the widgets headlessly with simulated clicks and key presses; see [`tests/`](https://github.com/lero-aom/spaceui/tree/v0.2.0/tests).
 Rendered snapshots cover representative layouts in both themes, and `cargo bench --bench workloads`
-measures representative CPU workloads. See [CONTRIBUTING.md](https://github.com/lero-aom/spaceui/blob/v0.1.0/CONTRIBUTING.md) for checks and snapshot review.
+measures representative CPU workloads. See [CONTRIBUTING.md](https://github.com/lero-aom/spaceui/blob/v0.2.0/CONTRIBUTING.md) for checks and snapshot review.
 
 ## Platform support
 
@@ -257,7 +261,7 @@ SpaceUI targets desktop egui applications. CI is configured to compile and run h
 Linux and macOS, on stable Rust and the MSRV. Rendered regression tests run separately on Linux with a
 software Vulkan renderer. These checks do not exercise native window-manager behavior or screen readers.
 Browser/WASM, mobile, other architectures and OS versions are not currently covered; egui support alone
-does not establish SpaceUI support. See the [support matrix](https://github.com/lero-aom/spaceui/blob/v0.1.0/docs/support.md).
+does not establish SpaceUI support. See the [support matrix](https://github.com/lero-aom/spaceui/blob/v0.2.0/docs/support.md).
 
 - **Fonts.** On Windows, Segoe UI, Segoe UI Semibold, Segoe UI Symbol and Segoe UI Emoji are read from the system at
   runtime, never bundled. Elsewhere egui's bundled fonts stand in under the same family names.
@@ -271,19 +275,19 @@ SpaceUI's MSRV is 1.95, the minimum of egui 0.37. It is raised only in minor rel
 SpaceUI builds on requires it.
 
 The API is pre-1.0. Patch releases preserve the supported public API; breaking changes require a minor release
-and migration notes. See the [compatibility and release policy](https://github.com/lero-aom/spaceui/blob/v0.1.0/docs/releases.md).
+and migration notes. See the [compatibility and release policy](https://github.com/lero-aom/spaceui/blob/v0.2.0/docs/releases.md).
 
 ## Contributing
 
-Contributions are welcome; [CONTRIBUTING.md](https://github.com/lero-aom/spaceui/blob/v0.1.0/CONTRIBUTING.md) explains the checks, the design rules and how to add
+Contributions are welcome; [CONTRIBUTING.md](https://github.com/lero-aom/spaceui/blob/v0.2.0/CONTRIBUTING.md) explains the checks, the design rules and how to add
 an icon.
 Report ordinary bugs through [GitHub issues](https://github.com/lero-aom/spaceui/issues); follow
-[SECURITY.md](https://github.com/lero-aom/spaceui/blob/v0.1.0/SECURITY.md) for potential vulnerabilities.
+[SECURITY.md](https://github.com/lero-aom/spaceui/blob/v0.2.0/SECURITY.md) for potential vulnerabilities.
 
 ## License
 
-SpaceUI is licensed under the [Apache License, Version 2.0](https://github.com/lero-aom/spaceui/blob/v0.1.0/LICENSE). Third-party notices are in
-[NOTICE.md](https://github.com/lero-aom/spaceui/blob/v0.1.0/NOTICE.md).
+SpaceUI is licensed under the [Apache License, Version 2.0](https://github.com/lero-aom/spaceui/blob/v0.2.0/LICENSE). Third-party notices are in
+[NOTICE.md](https://github.com/lero-aom/spaceui/blob/v0.2.0/NOTICE.md).
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in SpaceUI by you, as
 defined in the Apache-2.0 license, shall be licensed as above, without any additional terms or conditions.

@@ -112,6 +112,7 @@ jobs:
       - run: python .github/scripts/check_consumer.py
       - run: cargo bench --locked --bench workloads --all-features --no-run
       - run: cargo bench --locked --bench allocations --all-features --no-run
+      - run: cargo bench --locked --bench svg_resize --all-features --no-run
       - run: python -B -m unittest discover -s .github/scripts -p "test_*.py"
 
   fuzz:

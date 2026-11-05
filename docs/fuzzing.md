@@ -2,8 +2,8 @@
 
 The isolated `fuzz/` Cargo workspace contains two `cargo-fuzz` targets:
 
-- `markdown` mutates Unicode and malformed inline markup, checking that parsing
-  does not panic and every returned formatting range is valid UTF-8.
+- `markdown` mutates Unicode and malformed markup through the `egui_commonmark`
+  integration, checking that rendering does not panic and UI bounds remain finite.
 - `geometry` supplies arbitrary floating-point bits to rounded outlines,
   gradients and polygon meshes, checking finite vertices, valid triangle indices
   and bounded rounded-rectangle subdivision. This includes invalid values and

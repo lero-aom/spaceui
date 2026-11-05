@@ -17,6 +17,7 @@ cargo test --locked --lib --no-default-features
 cargo test --locked --test visual --all-features
 cargo bench --locked --bench workloads --all-features
 cargo bench --locked --bench allocations --all-features
+cargo bench --locked --bench svg_resize --all-features
 python .github/scripts/check_consumer.py
 ```
 
@@ -84,6 +85,11 @@ To update the Linux shell baselines, use Ubuntu 26.04 with Mesa lavapipe, set `V
 installed `/usr/share/vulkan/icd.d/lvp*.json` file as in CI, then run
 `SPACEUI_SNAPSHOT_PROFILE=linux-vulkan WGPU_BACKEND=vulkan UPDATE_SNAPSHOTS=force cargo test --locked --test visual --all-features shell_at_normal_and_constrained_sizes`.
 Review the new images and record renderer upgrades alongside any resulting baseline changes.
+
+The 0.2.0 CommonMark migration refreshed the two wide Linux shell baselines on Ubuntu 26.04,
+Rust 1.95.0 and Mesa llvmpipe 26.0.8 (LLVM 21.1.8). Each changed 23 pixels above the default threshold
+in the reply text; the constrained shell baselines were unchanged. The shared controls and chat baselines
+were also verified with this renderer after their Windows refresh.
 
 For performance changes, record the benchmark output, Rust version, build mode, platform and workload.
 Compare before and after on the same machine. Hosted-runner timings are not stable enough for a universal

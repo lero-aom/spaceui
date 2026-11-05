@@ -48,12 +48,7 @@ fn main() {
     });
     let malformed = "[".repeat(16_384);
     measure("16 KiB malformed Markdown", 100, || {
-        black_box(markdown::inline_job(
-            black_box(&malformed),
-            &egui::FontId::proportional(14.0),
-            egui::Color32::WHITE,
-            &Theme::default().palette,
-        ));
+        ctx.run_ui(input(), |ui| markdown::render(ui, black_box(&malformed))).drop_without_applying_deltas();
     });
     measure("SVG rasterization 64 px", 100, || {
         black_box(Icon::Orbit.svg().rasterize(64));

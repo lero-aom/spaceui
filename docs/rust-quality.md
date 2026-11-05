@@ -81,7 +81,8 @@ baseline from the original local baseline while retaining the original compariso
   deferred panic contract, now documented. Applications must supply valid TTF/OTF assets.
 - SVG raster dimensions and retained cache bytes are bounded; arbitrary SVG source complexity and
   process-wide allocation exhaustion are not made recoverable by those bounds.
-- The Markdown renderer remains a documented subset, not a complete CommonMark implementation.
+- At the time of this review the Markdown renderer was a documented subset. It has since been replaced
+  with `egui_commonmark`; see [integration.md](integration.md) for the current rendering contract.
 - Safe Rust and passing lint/tests do not prove semantic correctness or exhaustively verify native
   window behavior. Fuzzing and platform tests remain ongoing checks.
 - Serialization, extra generics, blanket trait derives and banning every internal assertion are not

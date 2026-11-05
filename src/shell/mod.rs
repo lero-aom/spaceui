@@ -80,25 +80,26 @@ impl Default for WindowLabels<'_> {
     }
 }
 
-/// An entry in the icon rail.
+/// An entry in the icon rail. Labels may borrow a runtime localization catalog
+/// or application-owned strings for the frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum RailItem {
+pub enum RailItem<'a> {
     /// A selectable page.
     Page {
         /// The tile's icon.
         icon: Icon,
         /// The tooltip and accessible page name.
-        label: &'static str,
+        label: &'a str,
     },
     /// A short rule separating groups (Settings from the pages, say).
     Divider,
 }
 
-impl RailItem {
+impl<'a> RailItem<'a> {
     /// A page with its icon and tooltip label.
     #[must_use]
-    pub const fn page(icon: Icon, label: &'static str) -> Self {
+    pub const fn page(icon: Icon, label: &'a str) -> Self {
         Self::Page { icon, label }
     }
 }
@@ -129,7 +130,7 @@ type Column<'a> = (&'a mut f32, RangeInclusive<f32>);
 /// ```
 /// use spaceui::{Icon, RailItem, Shell, Theme, egui, widgets, widgets::Tone};
 ///
-/// const RAIL: &[RailItem] = &[RailItem::page(Icon::Home, "Home"), RailItem::page(Icon::Settings, "Settings")];
+/// const RAIL: &[RailItem<'static>] = &[RailItem::page(Icon::Home, "Home"), RailItem::page(Icon::Settings, "Settings")];
 ///
 /// # let ctx = egui::Context::default();
 /// # Theme::carbon_copper().install(&ctx);
@@ -148,8 +149,8 @@ type Column<'a> = (&'a mut f32, RangeInclusive<f32>);
 #[must_use = "a shell does nothing until `show` is called"]
 pub struct Shell<'a> {
     title: &'a str,
-    logo: Option<Svg>,
-    rail: &'a [RailItem],
+    logo: Option<Svg<'a>>,
+    rail: &'a [RailItem<'a>],
     left: Option<Column<'a>>,
     right: Option<Column<'a>>,
     status: f32,
@@ -205,7 +206,7 @@ impl<'a> Shell<'a> {
     }
 
     /// The app's logo, beside the title.
-    pub fn logo(mut self, logo: Svg) -> Self {
+    pub fn logo(mut self, logo: Svg<'a>) -> Self {
         self.logo = Some(logo);
         self
     }
@@ -218,7 +219,7 @@ impl<'a> Shell<'a> {
     /// When `items` is non-empty, an out-of-range page is clamped to the last
     /// page, or zero for a rail containing only dividers. An empty rail leaves
     /// the caller's page unchanged.
-    pub fn rail(mut self, items: &'a [RailItem]) -> Self {
+    pub fn rail(mut self, items: &'a [RailItem<'a>]) -> Self {
         self.rail = items;
         self
     }

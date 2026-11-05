@@ -315,7 +315,7 @@ impl Icon {
 
     /// The icon's SVG, for painting at any size or as a window icon.
     #[must_use]
-    pub const fn svg(self) -> Svg {
+    pub const fn svg(self) -> Svg<'static> {
         match self {
             Icon::Alert => Svg::new("spaceui/alert", include_str!("../../assets/icons/alert.svg")),
             Icon::Back => Svg::new("spaceui/back", include_str!("../../assets/icons/back.svg")),

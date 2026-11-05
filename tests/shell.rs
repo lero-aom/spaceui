@@ -8,7 +8,7 @@ use spaceui::egui::{Event, Key, Modifiers, Pos2, Role, Shape, Ui, Vec2, Viewport
 use spaceui::shell::WindowLabels;
 use spaceui::{Icon, Metrics, RailItem, Regions, Shell, Theme};
 
-const RAIL: &[RailItem] = &[
+const RAIL: &[RailItem<'static>] = &[
     RailItem::page(Icon::Home, "Home"),
     RailItem::page(Icon::Star, "Targets"),
     RailItem::Divider,
@@ -163,7 +163,7 @@ fn constrained_windows_keep_regions_ordered_and_inside_the_viewport() {
     }
 }
 
-const LONG_RAIL: &[RailItem] = &[
+const LONG_RAIL: &[RailItem<'static>] = &[
     RailItem::page(Icon::Home, "First page"),
     RailItem::page(Icon::Home, "Second page"),
     RailItem::page(Icon::Home, "Third page"),
@@ -220,6 +220,27 @@ fn rail_keyboard_navigation_reveals_overflow_pages() {
     harness.run();
     assert_eq!(*harness.state(), 1);
     assert!(harness.get_by_label("Second page").is_focused());
+}
+
+#[test]
+fn runtime_labels_can_change_language_without_losing_rail_focus() {
+    let mut harness =
+        accessible_shell(vec2(800.0, 600.0), (0, String::from("Sky"), String::from("Map")), |ui, (page, sky, map)| {
+            let rail = [RailItem::page(Icon::Orbit, sky), RailItem::page(Icon::Orbit, map)];
+            let name = String::from("runtime/logo");
+            let source = String::from(r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>"#);
+            let _ = Shell::new("Localized").logo(spaceui::Svg::new(&name, &source)).rail(&rail).show(ui, page);
+        });
+    harness.get_by_label("Sky").focus();
+    harness.run();
+    harness.state_mut().1 = String::from("Himmel");
+    harness.state_mut().2 = String::from("Karte");
+    harness.run();
+    assert!(harness.get_by_label("Himmel").is_focused());
+    harness.key_press(Key::ArrowDown);
+    harness.run();
+    assert_eq!(harness.state().0, 1);
+    assert!(harness.get_by_label("Karte").is_focused());
 }
 
 #[test]
