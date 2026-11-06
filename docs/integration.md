@@ -61,6 +61,31 @@ A disabled Composer returns neither action. Applications still own when to clear
 busy, and must give each Composer a stable ID. Sequence tests cover these combinations and transitions;
 native IME/backend integration also needs application testing.
 
+## Configurable controls and response ownership
+
+`widgets::Button::primary(label)` and `Button::secondary(label)` implement `egui::Widget`, so they work
+with `ui.add`, `ui.add_enabled` and reusable widget adapters. Minimum size, padding, corner radius,
+solid fill and text colour are optional overrides. Disabled colours continue to come from the theme.
+The existing button functions delegate to the same implementation.
+
+For choice groups, `tabs_response` and `segmented_response` retain the same keyboard navigation,
+accessibility roles and caller-owned selection as the boolean helpers. Their `ChoiceResponse.response`
+is an egui response union with the group's layout ID. Use it for bounds, hover help, clicks and changes;
+use `choices[index]` for focus or a particular choice's response. Do not call `interact` on the union.
+Selection-state changes mark the old and new choices changed; clamping an invalid index marks the
+aggregate changed even when the group is empty or disabled. Disabled groups ignore user input.
+
+`theme::ControlMetrics::install` sets context-wide button, tab, segment and field dimensions. Per-button
+options override those defaults. `chat::ComposerMetrics::install` provides the same convention for
+composer defaults, with `.metrics(...)` for an individual composer. These settings deliberately survive
+`Theme::install` so palette switching does not reset density or drafting preferences. Reinstall default
+metrics to reset them. No fields were added to the existing public `Theme` or `Metrics` structs.
+
+Always use a configured composer's `desired_height` when computing its layout. The static `measure`
+method knows only the installed defaults. Longer drafts scroll; very small supplied rectangles may
+leave no usable editing area. Non-finite dimensions use defaults and large/negative values are bounded
+as described in the API docs. Font sizes and line limits have additional bounds.
+
 ## Markdown and external content
 
 Replies and user bubbles use `egui_commonmark` 0.26 (egui 0.37), including nested lists, reference links,

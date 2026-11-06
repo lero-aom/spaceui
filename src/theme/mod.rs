@@ -12,10 +12,13 @@
 //! assert_eq!(Theme::of(&ctx).name, "Deep Space");
 //! ```
 mod backdrop;
+mod controls;
 mod fonts;
 mod palette;
 
 pub use backdrop::paint_backdrop;
+pub use controls::{ControlMetrics, ControlSize};
+pub(crate) use controls::{normalize, normalize_vec};
 pub use fonts::{FontFile, Fonts, SEMIBOLD, mono, regular, semibold};
 pub use palette::Palette;
 

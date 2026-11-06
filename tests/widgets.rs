@@ -359,3 +359,175 @@ fn icon_buttons_expose_the_action_name() {
     });
     assert_eq!(harness.get_by_label("Delete draft").accesskit_node().role(), Role::Button);
 }
+
+#[test]
+fn configured_buttons_keep_keyboard_accessibility_and_disabled_behavior() {
+    for primary in [false, true] {
+        let mut harness = accessible_harness((true, 0), move |ui, (enabled, clicks)| {
+            let button = if primary { widgets::Button::primary("Save") } else { widgets::Button::new("Save") };
+            let response = ui.add_enabled(
+                *enabled,
+                button
+                    .min_size(spaceui::egui::vec2(120.0, 44.0))
+                    .padding(spaceui::egui::vec2(20.0, 10.0))
+                    .corner_radius(10.0),
+            );
+            assert!(response.rect.width() >= 120.0 && response.rect.height() >= 44.0);
+            *clicks += usize::from(response.clicked());
+        });
+        assert_eq!(harness.get_by_label("Save").accesskit_node().role(), Role::Button);
+        harness.get_by_label("Save").click_accesskit();
+        harness.run();
+        assert_eq!(harness.state().1, 1);
+        harness.get_by_label("Save").focus();
+        harness.run();
+        harness.key_press(Key::Enter);
+        harness.run();
+        assert_eq!(harness.state().1, 2);
+        harness.state_mut().0 = false;
+        harness.run();
+        harness.key_press(Key::Enter);
+        harness.run();
+        assert_eq!(harness.state().1, 2);
+    }
+}
+
+#[test]
+fn control_metrics_survive_palette_changes_and_button_overrides_are_local() {
+    use spaceui::{
+        Theme,
+        egui::vec2,
+        theme::{ControlMetrics, ControlSize},
+    };
+    let mut harness = Harness::new();
+    let large = ControlSize { min_size: vec2(180.0, 60.0), padding: vec2(20.0, 12.0) };
+    let metrics = ControlMetrics { button: large, tab: large, segmented: large, field: large };
+    metrics.install(&harness.ctx);
+    Theme::deep_space().install(&harness.ctx);
+    assert_eq!(ControlMetrics::of(&harness.ctx), metrics);
+    assert_eq!(ControlMetrics::of(&spaceui::egui::Context::default()), ControlMetrics::default());
+    harness.frame(Vec::new(), &mut |ui| {
+        let custom = ui.add(widgets::Button::secondary("Go").min_size(vec2(50.0, 25.0)).padding(vec2(1.0, 1.0)));
+        assert!(custom.rect.width() < 180.0 && custom.rect.height() < 60.0);
+        let standard = widgets::primary(ui, "Go");
+        assert_eq!(standard.rect.size(), large.min_size);
+        for response in
+            [widgets::tabs_response(ui, &mut 0, &["A", "B"]), widgets::segmented_response(ui, &mut 0, &["C", "D"])]
+        {
+            assert!(response.response.rect.height() >= 60.0);
+            assert!(response.choices.iter().all(|choice| choice.rect.width() >= 180.0));
+        }
+        let field = ui.scope(|ui| widgets::text_field(ui, &mut String::new(), "Name"));
+        assert!(field.response.rect.height() >= 60.0);
+    });
+}
+
+#[test]
+fn invalid_control_sizing_stays_finite() {
+    use spaceui::{
+        egui::Vec2,
+        theme::{ControlMetrics, ControlSize},
+    };
+    for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0, 0.0, f32::MAX] {
+        let mut harness = Harness::new();
+        let size = ControlSize { min_size: Vec2::splat(value), padding: Vec2::splat(value) };
+        ControlMetrics { button: size, tab: size, segmented: size, field: size }.install(&harness.ctx);
+        harness.frame(Vec::new(), &mut |ui| {
+            let response = ui.add(
+                widgets::Button::primary("Finite")
+                    .min_size(Vec2::splat(value))
+                    .padding(Vec2::splat(value))
+                    .corner_radius(value),
+            );
+            assert!(response.rect.is_finite() && response.rect.is_positive());
+            for choice in [widgets::tabs_response(ui, &mut 0, &["A"]), widgets::segmented_response(ui, &mut 0, &["B"])]
+            {
+                assert!(choice.response.rect.is_finite());
+            }
+            assert!(widgets::text_field(ui, &mut String::new(), "Name").rect.is_finite());
+        });
+    }
+}
+
+#[test]
+fn choice_responses_report_clicks_changes_and_individual_focus() {
+    for segmented in [false, true] {
+        let mut harness =
+            accessible_harness((0, 0, 0, Vec::new()), move |ui, (selected, changes, clicks, responses)| {
+                let shown = if segmented {
+                    widgets::segmented_response(ui, selected, &["First", "Second", "Third"])
+                } else {
+                    widgets::tabs_response(ui, selected, &["First", "Second", "Third"])
+                };
+                *changes += usize::from(shown.response.changed());
+                *clicks += usize::from(shown.response.clicked());
+                for child in &shown.choices {
+                    assert!(shown.response.rect.contains_rect(child.rect));
+                }
+                *responses = shown.choices;
+            });
+        harness.get_by_label("Third").click();
+        harness.step();
+        assert_eq!((harness.state().0, harness.state().1, harness.state().2), (2, 1, 1));
+        let responses = &harness.state().3;
+        assert!(responses[0].changed() && !responses[1].changed() && responses[2].changed());
+        harness.run();
+        harness.get_by_label("Third").click();
+        harness.run();
+        assert_eq!((harness.state().1, harness.state().2), (1, 2), "reselecting is a click but not a change");
+        harness.get_by_label("Third").focus();
+        harness.run();
+        harness.key_press(Key::Home);
+        harness.run();
+        assert_eq!(harness.state().0, 0);
+        assert_eq!(harness.state().1, 2);
+        assert!(harness.state().3[0].has_focus());
+    }
+}
+
+#[test]
+fn choice_responses_clamp_empty_indices_and_ignore_disabled_input() {
+    for segmented in [false, true] {
+        let mut harness = Harness::new();
+        let mut index = usize::MAX;
+        let mut first = true;
+        harness.frame(Vec::new(), &mut |ui| {
+            let response = if segmented {
+                widgets::segmented_response(ui, &mut index, &[])
+            } else {
+                widgets::tabs_response(ui, &mut index, &[])
+            };
+            assert_eq!(response.response.changed(), first);
+            first = false;
+            assert!(response.choices.is_empty());
+        });
+        assert_eq!(index, 0);
+        let mut changes = 0;
+        let mut at = Pos2::ZERO;
+        let mut show = |ui: &mut Ui| {
+            ui.add_enabled_ui(false, |ui| {
+                let response = if segmented {
+                    widgets::segmented_response(ui, &mut index, &["A", "B"])
+                } else {
+                    widgets::tabs_response(ui, &mut index, &["A", "B"])
+                };
+                at = response.choices[1].rect.center();
+                changes += usize::from(response.response.changed());
+                assert!(!response.response.clicked());
+            });
+        };
+        harness.frame(Vec::new(), &mut show);
+        let target = at;
+        harness.click(target, |ui| {
+            ui.add_enabled_ui(false, |ui| {
+                let response = if segmented {
+                    widgets::segmented_response(ui, &mut index, &["A", "B"])
+                } else {
+                    widgets::tabs_response(ui, &mut index, &["A", "B"])
+                };
+                assert!(!response.response.clicked() && !response.response.changed());
+            });
+        });
+        assert_eq!((index, changes), (0, 0));
+    }
+}

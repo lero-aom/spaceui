@@ -20,6 +20,10 @@ fn main() {
     Theme::carbon_copper().install(&context);
     context.run_ui(Default::default(), |ui| {
         let _ = spaceui::widgets::primary(ui, "Consumer");
+        let _ = ui.add(spaceui::widgets::Button::primary("Configured")
+            .min_size(egui::vec2(120.0, 40.0)));
+        let _ = spaceui::widgets::tabs_response(ui, &mut 0, &["One", "Two"]);
+        let _ = spaceui::theme::ControlMetrics::of(ui.ctx());
     }).drop_without_applying_deltas();
 }
 '''

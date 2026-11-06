@@ -50,6 +50,23 @@ fn main() {
     measure("16 KiB malformed Markdown", 100, || {
         ctx.run_ui(input(), |ui| markdown::render(ui, black_box(&malformed))).drop_without_applying_deltas();
     });
+    // Compare the same repeated brackets as one plain label, then ordinary
+    // CommonMark text of the same length. These are warm full-frame workloads.
+    measure("16 KiB brackets / plain label", 100, || {
+        ctx.run_ui(input(), |ui| {
+            ui.label(egui::RichText::new(black_box(&malformed)).size(13.5));
+        })
+        .drop_without_applying_deltas();
+    });
+    let ordinary = "x".repeat(16_384);
+    measure("16 KiB ordinary Markdown", 100, || {
+        ctx.run_ui(input(), |ui| markdown::render(ui, black_box(&ordinary))).drop_without_applying_deltas();
+    });
+    for (name, text) in [("brackets", &malformed), ("ordinary", &ordinary)] {
+        let output = ctx.run_ui(input(), |ui| markdown::render(ui, text));
+        println!("16 KiB {name} CommonMark: {} paint shapes before tessellation", output.shapes.len());
+        output.drop_without_applying_deltas();
+    }
     measure("SVG rasterization 64 px", 100, || {
         black_box(Icon::Orbit.svg().rasterize(64));
     });

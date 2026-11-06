@@ -1,4 +1,4 @@
-use crate::Theme;
+use crate::{Theme, theme::ControlMetrics};
 use egui::{Align2, Frame, Id, Response, RichText, Sense, Stroke, StrokeKind, TextEdit, Ui, vec2};
 
 /// A single-line text field that fills the available width. Returns the text
@@ -28,7 +28,8 @@ pub fn text_field_id(
 fn show(ui: &mut Ui, id: Id, text: &mut String, hint: &str) -> Response {
     let theme = Theme::of(ui.ctx());
     let p = &theme.palette;
-    let height = 34.0_f32.max(super::text_size(ui, 14.0) + 20.0);
+    let metrics = ControlMetrics::of(ui.ctx()).field;
+    let height = metrics.min_size.y.max(super::text_size(ui, 14.0) + 2.0 * metrics.padding.y);
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
     let focused = ui.memory(|m| m.has_focus(id));
     ui.painter().rect(
@@ -38,7 +39,7 @@ fn show(ui: &mut Ui, id: Id, text: &mut String, hint: &str) -> Response {
         Stroke::new(if focused { 2.0 } else { 1.0 }, if focused { p.accent_hi } else { p.border }),
         StrokeKind::Inside,
     );
-    let inner = rect.shrink2(vec2(12.0, 0.0));
+    let inner = rect.shrink2(vec2(metrics.padding.x.min(rect.width() / 2.0), 0.0));
     ui.put(
         inner,
         TextEdit::singleline(text)

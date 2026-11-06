@@ -48,7 +48,13 @@ impl eframe::App for App {
             }
             widgets::card(ui, |ui| {
                 ui.horizontal(|ui| {
-                    if widgets::primary(ui, if self.on { "Pause sequence" } else { "Start sequence" }).clicked() {
+                    if ui
+                        .add(
+                            widgets::Button::primary(if self.on { "Pause sequence" } else { "Start sequence" })
+                                .min_size(egui::vec2(140.0, 36.0)),
+                        )
+                        .clicked()
+                    {
                         self.on = !self.on;
                     }
                     if widgets::secondary(ui, "Reset").clicked() {

@@ -103,12 +103,17 @@ and [docs/fuzzing.md](docs/fuzzing.md) for the parser/geometry fuzz targets run 
 
 - **Colours come from the palette.** Widgets read `Theme::of(ctx)` and use a `Palette` role (`accent`, `field`,
   `border_soft`, ...), never a literal hue. If no role fits, propose one.
-- **Sizes come from `Metrics`** where they are shared (radii, rail and title bar sizes).
+- **Sizes have explicit defaults.** `Metrics` owns shared radii and shell sizes; `theme::ControlMetrics`
+  owns button, tab, segment and text-field sizing. `chat::ComposerMetrics` owns composer geometry and growth.
+  Both additional configurations are installed per context, survive palette changes, and preserve the
+  existing `Theme`/`Metrics` struct shapes. Per-instance builder overrides take precedence.
 - **Edges stay smooth.** Paint gradients and custom fills with `paint`, which feathers their edges; egui's own shapes
   are already anti-aliased.
 - **Art is SVG.** Draw icons on a 24 x 24 grid with white 1.8-point strokes, round caps and joins, so tinting works.
-- **Widgets are functions** that allocate their own space and return egui's `Response` when interactive. Builders
-  (`Shell`, `Composer`) are for things with several options.
+- **Keep simple widget helpers.** Configurable controls may also expose builders implementing `egui::Widget`
+  (such as `widgets::Button`). Keep both entry points on the same rendering and interaction implementation.
+  Choice groups expose aggregate and individual responses through `tabs_response`/`segmented_response`;
+  retain the existing boolean helpers for callers that only need a change flag.
 - **Document every public item**, with an example where usage isn't obvious. Examples run as doc tests.
 - **Test behaviour headlessly.** `tests/common` simulates clicks and key presses; add a test for new interaction.
 - **Keep controls accessible.** Supply names for icon-only controls, preserve keyboard focus and activation,

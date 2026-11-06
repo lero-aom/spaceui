@@ -347,3 +347,75 @@ fn reduced_motion_chat_settles_instead_of_repainting_forever() {
     });
     assert!(harness.run_ok().is_some());
 }
+
+#[test]
+fn composer_metrics_share_measurement_and_preserve_send_behavior() {
+    use chat::ComposerMetrics;
+    use egui_kittest::kittest::Queryable;
+    let metrics = ComposerMetrics {
+        max_lines: 2,
+        row_height: 54.0,
+        button_size: 44.0,
+        padding: vec2(20.0, 16.0),
+        ..Default::default()
+    };
+    let mut harness = egui_kittest::Harness::new_ui_state(
+        move |ui, (draft, sends): &mut (String, usize)| {
+            let composer = Composer::new("configured", draft).metrics(metrics);
+            let height = composer.desired_height(ui, 360.0);
+            let rect = Rect::from_min_size(pos2(20.0, 40.0), vec2(360.0, height));
+            *sends += usize::from(composer.show(ui, rect, |_| {}).send);
+        },
+        ("A draft".to_owned(), 0),
+    );
+    let button = harness.get_by_label("Send");
+    assert!((button.rect().width() - 44.0).abs() < 0.01);
+    button.click();
+    harness.run();
+    assert_eq!(harness.state().1, 1);
+    assert_eq!(harness.state().0, "A draft");
+}
+
+#[test]
+fn composer_growth_limits_and_installed_defaults_agree() {
+    use chat::ComposerMetrics;
+    let mut harness = Harness::new();
+    let metrics = ComposerMetrics { max_lines: 2, row_height: 50.0, ..Default::default() };
+    metrics.install(&harness.ctx);
+    spaceui::Theme::deep_space().install(&harness.ctx);
+    assert_eq!(ComposerMetrics::of(&harness.ctx), metrics);
+    let mut draft = "line\n".repeat(40);
+    harness.frame(Vec::new(), &mut |ui| {
+        let measured = Composer::measure(ui, 360.0, &draft, "Hint");
+        let composer = Composer::new("configured", &mut draft).hint("Hint");
+        assert!((composer.desired_height(ui, 360.0) - measured).abs() < 0.01);
+        assert!(measured <= 24.0 + 18.0 * 2.0 + 4.0 + 50.0);
+        let taller = composer.metrics(ComposerMetrics { max_lines: 10, ..metrics });
+        assert!(taller.desired_height(ui, 360.0) > measured);
+    });
+}
+
+#[test]
+fn invalid_composer_metrics_and_rectangles_are_safe() {
+    use chat::ComposerMetrics;
+    let mut harness = Harness::new();
+    for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0, 0.0, f32::MAX] {
+        let metrics = ComposerMetrics {
+            max_lines: usize::MAX,
+            font_size: value,
+            line_height: value,
+            padding: spaceui::egui::Vec2::splat(value),
+            row_height: value,
+            button_size: value,
+            corner_radius: value,
+        };
+        metrics.install(&harness.ctx);
+        harness.frame(Vec::new(), &mut |ui| {
+            let mut draft = "Draft".to_owned();
+            let composer = Composer::new("invalid", &mut draft).metrics(metrics);
+            assert!(composer.desired_height(ui, value).is_finite());
+            let response = composer.show(ui, Rect::from_min_size(pos2(value, 0.0), vec2(0.0, 0.0)), |_| {});
+            assert_eq!(response, ComposerResponse::default());
+        });
+    }
+}

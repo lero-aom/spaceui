@@ -39,7 +39,7 @@ mod composer;
 pub mod markdown;
 pub mod transcript;
 
-pub use composer::{Composer, ComposerResponse};
+pub use composer::{Composer, ComposerMetrics, ComposerResponse};
 
 use crate::{Icon, Theme, text::truncated};
 use egui::{

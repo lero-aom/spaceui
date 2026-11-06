@@ -136,6 +136,40 @@ The separate allocation benchmark still reports 20 allocations, zero reallocatio
 bytes per cached SVG frame, matching the previous implementation. Clearing the cache resets texture,
 document and source-byte counts to zero.
 
+## Configurable controls and CommonMark investigation
+
+Recorded 2026-11-06 on Windows, AMD Ryzen 9 5950X, Rust 1.97.1, optimized bench profile,
+all features, bundled fonts and reduced motion. Timing and allocation executables ran separately,
+without concurrent validation builds. Existing `workloads` cases were measured before the API changes
+and again with the added comparisons:
+
+| Warm CPU workload | Before median / p95 | After median / p95 |
+|---|---:|---:|
+| 100 rows of three controls | 2,311.2 / 2,513.6 us | 2,282.6 / 2,503.0 us |
+| 100-message CommonMark frame | 1,330.2 / 1,423.4 us | 1,307.3 / 1,396.7 us |
+| 16 KiB unmatched brackets through CommonMark | 15,569.5 / 16,678.6 us | 14,379.5 / 15,329.2 us |
+| Same brackets as one plain egui label | Not measured | 5.4 / 7.2 us |
+| 16 KiB ordinary text through CommonMark | Not measured | 41.5 / 83.4 us |
+
+These are individual runs, not evidence of a Markdown speed improvement: its rendering implementation
+and dependency versions did not change. Plain-label results are a warm-layout comparison, not the cost
+of laying out a new 16 KiB document. All timings exclude GPU drawing and native event handling.
+
+The repeated-bracket CommonMark frame emitted 12,190 paint shapes before tessellation; the ordinary-text
+frame emitted one. Inspection of the pinned `egui_commonmark` 0.26 renderer shows its `event_label` path
+creates an egui label for each text event. The measurements and source together point to fragmented text
+rendering in this workload, rather than SpaceUI's decorative geometry, as the next profiling target.
+They do not separate parser time from per-label layout/interaction time. Coalescing compatible text events
+would need upstream investigation and regression coverage for formatting, links, source ranges and wrapping.
+The benchmark now preserves the three comparisons so that such a change can be evaluated later.
+
+The separate allocation run retained the previous results: 24 allocations, 10 reallocations and 11,397
+requested bytes per button frame; 20 allocations and 8,846 bytes per cached SVG frame; 3,042 allocations,
+7 reallocations and 508,461 bytes per 100-paragraph CommonMark frame. These include egui's frame costs.
+The SVG resize benchmark completed with 70-icon resize median / p95 of 3,015.9 / 4,167.2 us and retained
+256 raster entries, 12,310,736 RGBA bytes, 70 documents and 20,754 source bytes. Clearing the allocation
+workload's SVG cache returned all counters to zero. These remain CPU and cache observations only.
+
 ## Compare changes
 
 Use the same toolchain, hardware, feature set and workload before and after a

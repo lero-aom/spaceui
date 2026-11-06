@@ -6,6 +6,18 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added `widgets::Button`, a configurable `egui::Widget`, while retaining `primary` and `secondary`.
+- Added `tabs_response` and `segmented_response` with aggregate and per-choice interaction responses;
+  the existing boolean helpers preserve their signatures and change-reporting behavior.
+- Added context-wide `theme::ControlMetrics` for text-bearing control sizing, preserving default visuals
+  and the existing `Theme` and `Metrics` struct shapes.
+- Added `chat::ComposerMetrics`, per-composer overrides and `Composer::desired_height` for consistent
+  configuration and measurement. Existing composer calls use the default geometry and input behavior.
+- Extended benchmarks with plain-label and ordinary-text comparisons for the expensive repeated-bracket
+  CommonMark workload. No Markdown rendering semantics or dependencies changed.
+
 ## [0.2.0] - 2026-11-05
 
 Requires Rust 1.95 and integrates with egui 0.37. This minor release changes public APIs;

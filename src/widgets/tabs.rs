@@ -1,8 +1,27 @@
-use crate::{Theme, paint, theme::semibold};
+use crate::{
+    Theme, paint,
+    theme::{ControlMetrics, semibold},
+};
 use egui::{
     Align2, CursorIcon, EventFilter, Id, Key, Modifiers, Rect, Response, Role, Sense, Stroke, StrokeKind, Ui,
     WidgetInfo, pos2, vec2,
 };
+
+/// A choice group's aggregate response and the responses of its individual choices.
+/// Selection stays in the caller-owned index.
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct ChoiceResponse {
+    /// Union of the group's layout and choice responses, useful for bounds,
+    /// clicks and hover help. `changed()` reports a final selection change,
+    /// including index clamping even when disabled or empty.
+    /// Focus belongs to individual [`Self::choices`], not the aggregate ID.
+    /// As with [`Response::union`], do not call `interact` on this response.
+    pub response: Response,
+    /// Responses in label order, retaining each choice's focus and identity.
+    /// A choice is marked changed when its selected state changes.
+    pub choices: Vec<Response>,
+}
 
 /// Page tabs with an accent underline, as on a chart toolbar. Updates
 /// `selected` and returns true when it changes, including clamping an invalid
@@ -21,27 +40,48 @@ use egui::{
 /// # }).drop_without_applying_deltas();
 /// ```
 pub fn tabs(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
+    tabs_response(ui, selected, labels).response.changed()
+}
+
+/// Page tabs with aggregate and per-choice responses. Interaction and index
+/// normalization match [`tabs`]; sizing follows [`ControlMetrics::tab`].
+///
+/// ```
+/// # use spaceui::{egui, widgets};
+/// # let ctx = egui::Context::default();
+/// # ctx.run_ui(Default::default(), |ui| {
+/// let mut selected = 0;
+/// let tabs = widgets::tabs_response(ui, &mut selected, &["Overview", "History"]);
+/// if tabs.response.changed() { /* update the view */ }
+/// tabs.response.on_hover_text("Choose a view");
+/// # }).drop_without_applying_deltas();
+/// ```
+pub fn tabs_response(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> ChoiceResponse {
     let p = Theme::of(ui.ctx()).palette;
+    let metrics = ControlMetrics::of(ui.ctx()).tab;
     let old = *selected;
     *selected = (*selected).min(labels.len().saturating_sub(1));
     let group = ui.next_auto_id().with("spaceui-tabs");
     ui.skip_ahead_auto_ids(1);
-    ui.horizontal(|ui| {
+    let output = ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         let mut choices = Vec::with_capacity(labels.len());
         for (i, label) in labels.iter().enumerate() {
             let active = *selected == i;
             let font = if active { semibold(super::text_size(ui, 14.0)) } else { super::text_font(ui, 14.0) };
-            let width = ui.fonts_mut(|f| f.layout_no_wrap((*label).into(), font.clone(), p.text)).size().x + 24.0;
-            let height = 34.0_f32.max(font.size + 20.0);
+            let width = (ui.fonts_mut(|f| f.layout_no_wrap((*label).into(), font.clone(), p.text)).size().x
+                + 2.0 * metrics.padding.x)
+                .max(metrics.min_size.x);
+            let height = metrics.min_size.y.max(font.size + 2.0 * metrics.padding.y);
             let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
-            let mut response = ui.interact(rect, group.with(i), Sense::click());
-            select(ui, &mut response, i, selected, labels.len(), group);
-            choices.push((*label, rect, response));
+            let response = ui.interact(rect, group.with(i), Sense::click());
+            select(ui, &response, i, selected, labels.len(), group);
+            choices.push(response);
         }
         // Resolve every interaction before publishing the group's selection.
         // A later click must clear an earlier choice in this same frame.
-        for (i, (label, rect, response)) in choices.into_iter().enumerate() {
+        for (i, (label, response)) in labels.iter().copied().zip(&mut choices).enumerate() {
+            let rect = response.rect;
             let active = *selected == i;
             let font = if active { semibold(super::text_size(ui, 14.0)) } else { super::text_font(ui, 14.0) };
             response.widget_info(|| WidgetInfo::labeled(Role::Tab, ui.is_enabled(), label));
@@ -65,24 +105,42 @@ pub fn tabs(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
                 );
                 paint::gradient_h(painter, bar, p.accent_hi, p.accent, 1.25);
             }
-            super::focus_ring(ui, &response, 7.0);
-            response.on_hover_cursor(CursorIcon::PointingHand);
+            super::focus_ring(ui, response, 7.0);
+            if old != *selected && (old == i || *selected == i) {
+                response.mark_changed();
+            }
+            if response.hovered() {
+                ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+            }
         }
+        choices
     });
-    old != *selected
+    group_response(output.response, output.inner, old != *selected)
 }
 
 /// A compact segmented control ("M5 | H1 | D1"). Updates `selected` and
 /// returns true on a change. Keyboard navigation and index clamping match [`tabs`].
 pub fn segmented(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
+    segmented_response(ui, selected, labels).response.changed()
+}
+
+/// A segmented control with aggregate and per-choice responses.
+/// Interaction and index normalization match [`segmented`]; sizing follows
+/// [`ControlMetrics::segmented`]. Each choice retains its radio-button role.
+pub fn segmented_response(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> ChoiceResponse {
+    let metrics = ControlMetrics::of(ui.ctx()).segmented;
     let theme = Theme::of(ui.ctx());
     let p = &theme.palette;
     let font = super::text_font(ui, 13.0);
     let widths: Vec<f32> = labels
         .iter()
-        .map(|label| ui.fonts_mut(|f| f.layout_no_wrap((*label).into(), font.clone(), p.text)).size().x + 22.0)
+        .map(|label| {
+            (ui.fonts_mut(|f| f.layout_no_wrap((*label).into(), font.clone(), p.text)).size().x
+                + 2.0 * metrics.padding.x)
+                .max(metrics.min_size.x)
+        })
         .collect();
-    let height = 30.0_f32.max(font.size + 17.0);
+    let height = metrics.min_size.y.max(font.size + 2.0 * metrics.padding.y).max(6.0);
     let (outer, outer_response) =
         ui.allocate_exact_size(vec2(widths.iter().sum::<f32>() + 6.0, height), Sense::hover());
     let radius = theme.metrics.control_radius;
@@ -91,14 +149,15 @@ pub fn segmented(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
     let old = *selected;
     *selected = (*selected).min(labels.len().saturating_sub(1));
     let mut choices = Vec::with_capacity(labels.len());
-    for (i, (label, width)) in labels.iter().zip(&widths).enumerate() {
+    for (i, width) in widths.iter().enumerate() {
         let rect = Rect::from_min_size(pos2(x, outer.top() + 3.0), vec2(*width, outer.height() - 6.0));
-        let mut response = ui.interact(rect, outer_response.id.with(i), Sense::click());
-        select(ui, &mut response, i, selected, labels.len(), outer_response.id);
-        choices.push((*label, rect, response));
+        let response = ui.interact(rect, outer_response.id.with(i), Sense::click());
+        select(ui, &response, i, selected, labels.len(), outer_response.id);
+        choices.push(response);
         x += width;
     }
-    for (i, (label, rect, response)) in choices.into_iter().enumerate() {
+    for (i, (label, response)) in labels.iter().copied().zip(&mut choices).enumerate() {
+        let rect = response.rect;
         response.widget_info(|| WidgetInfo::selected(Role::RadioButton, ui.is_enabled(), *selected == i, label));
         let active = *selected == i;
         if active {
@@ -114,17 +173,31 @@ pub fn segmented(ui: &mut Ui, selected: &mut usize, labels: &[&str]) -> bool {
             p.text_2
         };
         ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, font.clone(), color);
-        super::focus_ring(ui, &response, (radius - 2.0).max(0.0));
-        response.on_hover_cursor(CursorIcon::PointingHand);
+        super::focus_ring(ui, response, (radius - 2.0).max(0.0));
+        if old != *selected && (old == i || *selected == i) {
+            response.mark_changed();
+        }
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+        }
     }
-    old != *selected
+    group_response(outer_response, choices, old != *selected)
 }
 
-fn select(ui: &Ui, response: &mut Response, index: usize, selected: &mut usize, count: usize, group: Id) {
+fn group_response(mut response: Response, choices: Vec<Response>, changed: bool) -> ChoiceResponse {
+    for choice in &choices {
+        response |= choice.clone();
+    }
+    if changed {
+        response.mark_changed();
+    }
+    ChoiceResponse { response, choices }
+}
+
+fn select(ui: &Ui, response: &Response, index: usize, selected: &mut usize, count: usize, group: Id) {
     if !ui.is_enabled() {
         return;
     }
-    let old = *selected;
     if response.clicked() {
         *selected = index;
     }
@@ -149,8 +222,5 @@ fn select(ui: &Ui, response: &mut Response, index: usize, selected: &mut usize, 
             *selected = next;
             ui.memory_mut(|m| m.request_focus(group.with(next)));
         }
-    }
-    if old != *selected {
-        response.mark_changed();
     }
 }

@@ -235,6 +235,41 @@ For a one-off colour, status widgets take `Tone::Custom(color)` next to the pale
 
 ![Palette roles and the icon set](https://raw.githubusercontent.com/lero-aom/spaceui/v0.2.0/docs/screenshots/palette-and-icons.png)
 
+## Configuring controls
+
+The existing `widgets::primary`, `secondary`, `tabs`, and `segmented` helpers remain available.
+Use `widgets::Button` with `ui.add` when an individual button needs different sizing or colours:
+
+```rust
+use spaceui::{egui, widgets};
+let ctx = egui::Context::default();
+ctx.run_ui(Default::default(), |ui| {
+    let button = widgets::Button::primary("Connect")
+        .min_size(egui::vec2(120.0, 40.0))
+        .padding(egui::vec2(18.0, 10.0));
+    let _response = ui.add_enabled(true, button);
+    let mut selected = 0;
+    let tabs = widgets::tabs_response(ui, &mut selected, &["Overview", "History"]);
+    if tabs.response.changed() { /* switch views */ }
+    tabs.response.on_hover_text("Choose a view");
+}).drop_without_applying_deltas();
+```
+
+`tabs_response` and `segmented_response` return a `ChoiceResponse`: `.response` aggregates bounds,
+hover and click flags, while `.choices` retains each choice's focus and accessible identity.
+`changed()` reports a selection change, including index clamping. Clicking an already-selected choice
+reports a click without a change. The original boolean helpers return the same change flag.
+
+Install `theme::ControlMetrics` to configure minimum sizes and text padding for buttons, tabs,
+segments and text fields across a context. Radii remain in `Theme::metrics`; colours and fonts
+retain their existing sources. Per-button overrides take precedence over installed control metrics.
+
+For chat, install `chat::ComposerMetrics` or pass `.metrics(...)` to one composer. It configures
+text size, growth limit, padding, accessory-row height, button size and corner radius. Measure a
+configured builder with `.desired_height(ui, width)` before calling `.show(...)`;
+`Composer::measure` uses context defaults. Both metrics installations survive theme changes;
+install their `Default` values to reset them. Defaults preserve the existing appearance.
+
 ## Checking your UI
 
 `window::Screenshot` renders a few frames, saves the window as a PNG and closes the app, for native visual checks of
