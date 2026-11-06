@@ -6,6 +6,10 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-06
+
+Compatible with 0.2.1; no migration is required. Rust 1.95 and egui 0.37 remain unchanged.
+
 ### Added
 
 - Added `Markdown` with an opt-in rich-rendering event budget and an explicit plain-source fallback response.
@@ -128,7 +132,8 @@ The first release includes these fixes from development and review:
 - Astronomy examples use illustrative data; they do not calculate live sky positions, connect to hardware
   or call an AI service.
 
-[Unreleased]: https://github.com/lero-aom/spaceui/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/lero-aom/spaceui/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/lero-aom/spaceui/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/lero-aom/spaceui/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/lero-aom/spaceui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lero-aom/spaceui/tree/v0.1.0

@@ -174,7 +174,7 @@ workload's SVG cache returned all counters to zero. These remain CPU and cache o
 
 Measured 2026-11-06 on Windows, Ryzen 9 5950X, Rust 1.97.1, optimized profile, all features,
 bundled fonts and reduced motion. The baseline is commit `1825813` (0.2.1); the after column is the
-unreleased implementation. Timing, allocation and validation runs were separate. These are local CPU
+0.2.2 implementation. Timing, allocation and validation runs were separate. These are local CPU
 observations, excluding GPU drawing and native event handling, not shared-runner thresholds.
 
 | Warm CPU workload | Before median / p95 (us) | After median / p95 (us) |
