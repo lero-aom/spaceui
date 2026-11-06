@@ -6,6 +6,11 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-06
+
+Compatible with 0.2.0; no migration is required. Rust 1.95 and egui 0.37 remain unchanged.
+The existing helpers and default visual appearance are preserved.
+
 ### Added
 
 - Added `widgets::Button`, a configurable `egui::Widget`, while retaining `primary` and `secondary`.
@@ -109,6 +114,7 @@ The first release includes these fixes from development and review:
 - Astronomy examples use illustrative data; they do not calculate live sky positions, connect to hardware
   or call an AI service.
 
-[Unreleased]: https://github.com/lero-aom/spaceui/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lero-aom/spaceui/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/lero-aom/spaceui/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/lero-aom/spaceui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lero-aom/spaceui/tree/v0.1.0
