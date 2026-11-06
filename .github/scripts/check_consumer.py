@@ -24,11 +24,26 @@ fn main() {
             .min_size(egui::vec2(120.0, 40.0)));
         let _ = spaceui::widgets::tabs_response(ui, &mut 0, &["One", "Two"]);
         let _ = spaceui::theme::ControlMetrics::of(ui.ctx());
+        let _ = ui.add(spaceui::widgets::Switch::new(&mut false).label("Alerts"));
+        let _ = ui.add(spaceui::widgets::NotchedSlider::new(&mut 0, 5).label("Effort"));
+        let _ = ui.add(spaceui::widgets::TextField::new(&mut String::new()).id_salt("query").width(200.0));
+    }).drop_without_applying_deltas();
+}
+'''
+    content = r'''use spaceui::{egui, chat::markdown::Markdown, art::SvgLoader, Icon};
+fn main() {
+    let context = egui::Context::default();
+    let mut loader = SvgLoader::new(&context).unwrap();
+    let _ = loader.load(Icon::Orbit.svg(), [64, 32]);
+    context.run_ui(Default::default(), |ui| {
+        let shown = Markdown::new("**Hello**").max_events(1024).show(ui);
+        assert!(!shown.fallback);
     }).drop_without_applying_deltas();
 }
 '''
     cases = [
         ("core", False, core, ""),
+        ("content", True, content, ""),
         ("desktop", True, (repository / "examples/minimal.rs").read_text(encoding="utf-8"),
          f'eframe = {{ version = {json.dumps(eframe_version)}, default-features = false, features = ["glow", "default_fonts", "wayland", "x11"] }}\n'),
     ]
@@ -43,7 +58,7 @@ fn main() {
             (consumer / "src/main.rs").write_text(source, encoding="utf-8")
             # Resolve this consumer's graph; do not copy the development lockfile.
             subprocess.run(["cargo", "check", "--manifest-path", str(consumer / "Cargo.toml")], env=environment, check=True)
-            if name == "core":
+            if name in {"core", "content"}:
                 subprocess.run(["cargo", "run", "--locked", "--manifest-path", str(consumer / "Cargo.toml")], env=environment, check=True)
 
 

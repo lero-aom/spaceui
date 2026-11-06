@@ -33,6 +33,59 @@ fn measure(name: &str, assets: &[Svg<'_>], cold: bool, frames: u32) {
     println!("  retained: {:?}", art::cache_stats(&ctx));
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn background() {
+    use std::{hint::black_box, task::Poll};
+    let ctx = egui::Context::default();
+    let mut loader = art::SvgLoader::new(&ctx).unwrap();
+    let source = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">{}</svg>"#,
+        r#"<circle cx="128" cy="128" r="120" fill="white" fill-opacity="0.01"/>"#.repeat(5000)
+    );
+    let svg = Svg::new("complex", &source);
+    let mut sync = Vec::new();
+    let mut enqueue = Vec::new();
+    let mut max_poll = Vec::new();
+    let mut latency = Vec::new();
+    for _ in 0..30 {
+        let start = Instant::now();
+        black_box(svg.try_rasterize(256).unwrap());
+        sync.push(start.elapsed().as_secs_f64() * 1_000_000.0);
+        loader.clear();
+        let start = Instant::now();
+        assert!(loader.load(svg, [256, 256]).unwrap().is_pending());
+        enqueue.push(start.elapsed().as_secs_f64() * 1_000_000.0);
+        let mut longest = 0.0_f64;
+        loop {
+            let poll_start = Instant::now();
+            let result = loader.load(svg, [256, 256]).unwrap();
+            longest = longest.max(poll_start.elapsed().as_secs_f64() * 1_000_000.0);
+            if let Poll::Ready(texture) = result {
+                let _ = black_box(texture);
+                break;
+            }
+            std::thread::yield_now();
+        }
+        max_poll.push(longest);
+        latency.push(start.elapsed().as_secs_f64() * 1_000_000.0);
+        ctx.run_ui(egui::RawInput::default(), |_| {}).drop_without_applying_deltas();
+    }
+    for (label, mut samples) in [
+        ("complex SVG sync raster", sync),
+        ("background enqueue call", enqueue),
+        ("background slowest poll/job", max_poll),
+        ("background end-to-end", latency),
+    ] {
+        samples.sort_by(f64::total_cmp);
+        println!(
+            "{label:30} median {:9.2} us  p95 {:9.2} us  n={}",
+            samples[samples.len() / 2],
+            samples[samples.len() * 95 / 100],
+            samples.len()
+        );
+    }
+}
+
 fn main() {
     let icons: Vec<_> = Icon::ALL.iter().map(|icon| icon.svg()).collect();
     let logo = Svg::new("resize/logo", include_str!("../examples/assets/spaceui.svg"));
@@ -44,4 +97,6 @@ fn main() {
         measure(&format!("{label}, cold"), assets, true, frames);
         measure(&format!("{label}, resize"), assets, false, frames);
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    background();
 }

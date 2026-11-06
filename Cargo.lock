@@ -2509,6 +2509,7 @@ dependencies = [
  "egui",
  "egui_commonmark",
  "egui_kittest",
+ "pulldown-cmark",
  "raw-window-handle",
  "resvg",
  "stats_alloc",

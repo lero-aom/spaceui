@@ -86,6 +86,13 @@ method knows only the installed defaults. Longer drafts scroll; very small suppl
 leave no usable editing area. Non-finite dimensions use defaults and large/negative values are bounded
 as described in the API docs. Font sizes and line limits have additional bounds.
 
+The input controls also have `egui::Widget` builders, so reusable adapters and `ui.add_enabled` work
+with `Switch::new(&mut enabled).label("Notifications")`,
+`NotchedSlider::new(&mut level, 5).width(180.0).label("Effort")`, and
+`TextField::new(&mut query).id_salt("query").hint_text("Search").width(240.0)`.
+The explicit field salt produces the same scoped ID as `text_field_id`; migrating a field to a builder
+does not lose its focus. Themes remain context-wide; these builders do not create independent theme scopes.
+
 ## Markdown and external content
 
 Replies and user bubbles use `egui_commonmark` 0.26 (egui 0.37), including nested lists, reference links,
@@ -93,6 +100,27 @@ tables and fenced code with basic syntax highlighting. `chat::markdown::render` 
 two-argument API and a shared per-context `CommonMarkCache`; `clear_cache` releases that cache.
 `render_with_cache` accepts an application-owned cache for link hooks and explicit lifetime management.
 The upstream `CommonMarkCache` and `CommonMarkViewer` types are re-exported for further customization.
+
+Long plain paragraphs that the CommonMark parser identifies as text-only are rendered as one label when
+fragmentation would otherwise create many widgets. The analysis cache retains at most 32 entries and 1 MiB
+of source plus decoded text; `clear_cache` clears it too. A changed source is reanalyzed. Formatting, links,
+line breaks, code and multiple paragraphs use the upstream viewer. This is not transcript virtualization.
+
+For an application that accepts showing source when rich rendering would create too many widgets:
+
+```rust
+let shown = spaceui::chat::markdown::Markdown::new(message).max_events(4096).show(ui);
+if shown.fallback {
+    ui.small("Showing Markdown source; open the document for full formatting.");
+}
+```
+
+The default has no event budget and preserves rich rendering. A budget counts parser events, including
+block boundaries, before creating rich widgets. The fallback displays the complete original source as a
+single wrapping label; markup is visible and links are inactive. Use `show_with_cache` for link hooks,
+or `ui.add(Markdown::new(message))` when only the egui response is needed. Source length, parser work and
+font layout still need separate application limits; an event budget is not a wall-clock deadline.
+The directly re-exported upstream `CommonMarkViewer` does not use SpaceUI's analysis cache or budget.
 
 The former `inline_job` API has been removed: CommonMark is rendered as widgets, not reduced to a single
 text layout job. Migrate custom bubbles to `render` or `render_with_cache` inside a constrained egui UI.
@@ -125,6 +153,25 @@ total-process memory or latency bound. Use `art::cache_stats` and `art::clear_ca
 both caches. Different documents may share a diagnostic name without sharing a cached texture; identical
 content shares an entry regardless of its name. Standalone raster/window-icon exports do not use this cache.
 See [performance.md](performance.md) for measured resize costs and workload limits.
+
+For runtime artwork on native targets, keep one `art::SvgLoader::new(&context)?` in application state.
+Its `load(svg, [width_px, height_px])` method returns `Result<Poll<TextureHandle>, SvgError>`. While pending,
+reserve the image's rectangle and show a placeholder; on completion, paint the returned texture into that
+rectangle. Supply both raster dimensions to preserve the intended aspect ratio, and recompute them for DPI
+or size changes. `SvgError::QueueFull` means retry on a later frame; completed work requests a repaint.
+The loader is bound to its creation context, so use its textures only in that context.
+
+One worker accepts at most two outstanding requests, even across `clear()` calls. It rejects sources over
+4 MiB and raster dimensions outside `1..=2048`; pending source bytes and retained cache source bytes each
+have a 4 MiB limit. The ready cache holds at most 32 entries/32 MiB of RGBA. Failed documents are cached.
+Source content and both dimensions identify results. Clearing discards old tickets so stale completions
+cannot replace new requests; externally held textures remain valid. Dropping does not join the worker.
+
+Parsing and rasterization run on the worker. Source copying, cache lookup, conversion into texture deltas
+and subsequent GPU upload remain foreground costs. Active resvg calls cannot be forcibly cancelled, and
+parsed-tree/filter allocations have no process-wide memory bound. This loader is an opt-in native path;
+built-in icons and synchronous exports retain their existing behavior. Its cache is separate from
+`art::cache_stats`/`art::clear_cache`; use the loader's `clear` method to release its retained results.
 
 `Screenshot::try_update` preserves a typed `ScreenshotError` and its underlying cause; the existing
 `update` helper retains its string-error interface.

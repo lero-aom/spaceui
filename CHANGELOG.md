@@ -6,6 +6,20 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added `Markdown` with an opt-in rich-rendering event budget and an explicit plain-source fallback response.
+- Added native `art::SvgLoader`: one background parsing/rasterization worker, bounded queue/cache, and
+  distinct pending, ready and failure states. Existing synchronous SVG APIs are unchanged.
+- Added `Switch`, `NotchedSlider` and `TextField` values implementing `egui::Widget`; helpers share their
+  implementation, including stable field identities, accessibility, keyboard input and changed reporting.
+
+### Performance
+
+- Coalesce parser-verified, fragmented plain paragraphs into a single label, with bounded analysis reuse.
+  Rich Markdown still uses `egui_commonmark`; nothing is truncated or silently downgraded by default.
+- Measure cold/streaming Markdown and complex SVG enqueue, polling and completion costs separately.
+
 ## [0.2.1] - 2026-11-06
 
 Compatible with 0.2.0; no migration is required. Rust 1.95 and egui 0.37 remain unchanged.

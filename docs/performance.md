@@ -170,6 +170,85 @@ The SVG resize benchmark completed with 70-icon resize median / p95 of 3,015.9 /
 256 raster entries, 12,310,736 RGBA bytes, 70 documents and 20,754 source bytes. Clearing the allocation
 workload's SVG cache returned all counters to zero. These remain CPU and cache observations only.
 
+## Fragmented Markdown and background SVG work
+
+Measured 2026-11-06 on Windows, Ryzen 9 5950X, Rust 1.97.1, optimized profile, all features,
+bundled fonts and reduced motion. The baseline is commit `1825813` (0.2.1); the after column is the
+unreleased implementation. Timing, allocation and validation runs were separate. These are local CPU
+observations, excluding GPU drawing and native event handling, not shared-runner thresholds.
+
+| Warm CPU workload | Before median / p95 (us) | After median / p95 (us) |
+|---|---:|---:|
+| 100 rows of three controls | 2,246.0 / 2,348.7 | 2,273.9 / 2,656.2 |
+| 100-message CommonMark frame | 1,266.9 / 1,309.9 | 1,331.9 / 1,518.5 |
+| 16 KiB unmatched brackets | 13,280.0 / 14,913.8 | 6.5 / 6.7 |
+| Same brackets as one plain label | 5.1 / 5.4 | 5.3 / 8.9 |
+| 16 KiB ordinary text | 29.8 / 33.5 | 36.8 / 44.1 |
+
+The bracket case now creates one paint shape instead of 12,190. SpaceUI uses pulldown-cmark's events
+with the upstream viewer's extension options to establish that the document is exactly one plain
+paragraph, then combines decoded text into one wrapping label. It does not interpret Markdown with a
+new grammar. Formatting, links, blocks, line breaks and mixed rich content stay with `egui_commonmark`.
+A cheap punctuation heuristic selects candidates; it adds scanning overhead, visible in the ordinary-text
+case. There is no claim that all workloads got faster.
+
+The analysis cache holds at most 32 exact source/budget entries and 1 MiB of source plus decoded text.
+Sources above 512 KiB bypass it; an expanded result also bypasses retention if its byte cost exceeds
+the budget. `markdown::clear_cache` clears both analysis and the shared upstream cache. Theme, width,
+DPI and font changes still go through egui's normal layout; only source analysis is retained here.
+
+Additional cases distinguish cache reuse from changing text:
+
+| CPU workload | Median / p95 (us) |
+|---|---:|
+| Brackets with analysis cleared before each frame | 838.7 / 1,229.7 |
+| Brackets with one character appended each frame | 5,763.1 / 6,620.0 |
+| Same append sequence as a plain egui label | 4,217.2 / 5,203.6 |
+| Mixed rich/bracket input, warm event-budget fallback | 6.1 / 7.1 |
+
+The cleared-analysis case still reuses egui's warm font/layout state; it is not a fully cold first frame.
+The streaming cases start at 16 KiB and append for ten warmups and 100 measured frames. New text needs
+new parsing and font layout. This is not transcript virtualization or incremental text layout, and the
+warm 6.5 us result must not be presented as streaming performance. The budget case explicitly opts
+into `Markdown::max_events(1024)` and displays the full original source without interpreting markup.
+The default never silently switches rich input to source. Event counting limits rich widget work,
+not source size, parser complexity or elapsed time. See [integration.md](integration.md#markdown-and-external-content).
+
+Allocation instrumentation reports 24 allocations, zero reallocations and 27,014 requested bytes per
+warm fragmented-paragraph frame. Buttons retain 24 allocations/11,397 bytes, and cached SVG frames
+20 allocations/8,846 bytes. The 100-paragraph frame reports 3,042 allocations, seven reallocations and
+508,477 bytes. These include egui's frame costs; they are allocation traffic, not resident memory.
+
+The native `SvgLoader` adds an optional single-worker path. The `svg_resize` benchmark also creates
+one 256 x 256 SVG with 5,000 overlapping translucent circles and measures 30 cold jobs:
+
+| Complex SVG operation | Median / p95 (us) |
+|---|---:|
+| Synchronous parse and rasterize | 860,000.9 / 870,842.0 |
+| Background enqueue call | 84.1 / 171.2 |
+| Slowest foreground poll per background job | 214.7 / 250.1 |
+| Background end-to-end completion | 872,560.5 / 877,373.7 |
+
+Enqueue/poll measurements are API-call costs, not full UI frames. Polling includes accepting the finished
+image into an egui texture; GPU upload is excluded. The benchmark yields the calling thread between polls.
+The worker moves parsing/rasterization off the caller; it does not make this SVG cheaper to render.
+Total completion is slightly slower in this run. Ordinary synchronous icon behavior remains unchanged;
+the 70-icon resize case measured 2,879.5 / 4,302.9 us with the same retained-cache bounds as before.
+
+The loader bounds outstanding work, retained entries, source bytes and raster dimensions. It cannot
+interrupt an active renderer or bound parsed-tree/filter allocations. Source copying, lookup, texture-delta
+creation and GPU upload remain foreground costs. Tests use a deliberately blocked worker to verify that
+requests return pending, queue limits survive `clear`, old results cannot replace new requests, and dropping
+a loader does not wait. Separate tests compare asynchronous pixels with synchronous output and verify
+runtime edits, error retention, worker failure and eviction.
+
+Local validation passed 136 unit/interaction/example tests, 33 doctests, four rendered regression suites
+without baseline changes, strict Clippy on stable and the MSRV, isolated feature checks, external consumers,
+and package verification. The updated Markdown fuzz target type-checks. A local Windows fuzz execution
+attempt failed at linking with unresolved `__start___sancov_*` / `__stop___sancov_*` coverage symbols;
+no successful fuzz run is claimed for this change. The existing Linux fuzz CI job remains configured.
+Native Linux/macOS interaction and full-window GPU profiling were not performed in this pass.
+
 ## Compare changes
 
 Use the same toolchain, hardware, feature set and workload before and after a

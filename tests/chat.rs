@@ -419,3 +419,33 @@ fn invalid_composer_metrics_and_rectangles_are_safe() {
         });
     }
 }
+
+#[test]
+fn fragmented_markdown_is_one_shape_and_streaming_can_restore_a_link() {
+    use egui_kittest::kittest::Queryable as _;
+    let ctx = spaceui::egui::Context::default();
+    let brackets = "[".repeat(16_384);
+    for _ in 0..2 {
+        let output = ctx.run_ui(spaceui::egui::RawInput::default(), |ui| chat::markdown::render(ui, &brackets));
+        assert_eq!(output.shapes.len(), 1, "a text fragment must not create a separate widget");
+        output.drop_without_applying_deltas();
+    }
+    let mut harness =
+        egui_kittest::Harness::new_ui_state(|ui, text: &mut String| chat::markdown::render(ui, text), "[".repeat(1024));
+    *harness.state_mut() = "[Completed](https://example.org)".to_owned();
+    harness.run();
+    harness.get_by_label("Completed");
+}
+
+#[test]
+fn explicit_markdown_budget_reports_fallback_without_truncating_source() {
+    use egui_kittest::kittest::Queryable as _;
+    let source = "**bold** [link](https://example.org)";
+    let harness = egui_kittest::Harness::new_ui_state(
+        move |ui, fallback| *fallback = chat::markdown::Markdown::new(source).max_events(1).show(ui).fallback,
+        false,
+    );
+    assert!(*harness.state());
+    harness.get_by_label(source);
+    assert!(harness.query_by_label("link").is_none());
+}

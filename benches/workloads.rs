@@ -67,6 +67,31 @@ fn main() {
         println!("16 KiB {name} CommonMark: {} paint shapes before tessellation", output.shapes.len());
         output.drop_without_applying_deltas();
     }
+    measure("brackets / cold analysis", 100, || {
+        markdown::clear_cache(&ctx);
+        ctx.run_ui(input(), |ui| markdown::render(ui, black_box(&malformed))).drop_without_applying_deltas();
+    });
+    let mut streaming = malformed.clone();
+    measure("brackets / streaming append", 100, || {
+        streaming.push('[');
+        ctx.run_ui(input(), |ui| markdown::render(ui, black_box(&streaming))).drop_without_applying_deltas();
+    });
+    let mut plain_stream = malformed.clone();
+    measure("plain label / streaming append", 100, || {
+        plain_stream.push('[');
+        ctx.run_ui(input(), |ui| {
+            ui.label(egui::RichText::new(black_box(&plain_stream)).size(13.5));
+        })
+        .drop_without_applying_deltas();
+    });
+    let mixed = format!("**bold** {malformed}");
+    measure("fragmented rich / budget 1024", 100, || {
+        ctx.run_ui(input(), |ui| {
+            let shown = markdown::Markdown::new(black_box(&mixed)).max_events(1024).show(ui);
+            assert!(shown.fallback);
+        })
+        .drop_without_applying_deltas();
+    });
     measure("SVG rasterization 64 px", 100, || {
         black_box(Icon::Orbit.svg().rasterize(64));
     });

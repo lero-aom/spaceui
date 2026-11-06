@@ -26,6 +26,10 @@
 //!
 //! [resvg]: https://github.com/linebender/resvg
 mod icons;
+#[cfg(not(target_arch = "wasm32"))]
+mod loader;
+#[cfg(not(target_arch = "wasm32"))]
+pub use loader::SvgLoader;
 
 pub use icons::Icon;
 
@@ -54,6 +58,13 @@ pub enum SvgError {
     /// The raster backing buffer could not be constructed. This does not
     /// represent every failure of the process's global allocator.
     AllocationFailed,
+    /// The background loader rejects source text larger than 4 MiB.
+    SourceTooLarge(usize),
+    /// The background loader's pending-work or pending-source budget is full.
+    /// Retry on a later frame; completion requests a repaint.
+    QueueFull,
+    /// The background worker stopped. Construct a new loader to retry.
+    WorkerStopped,
 }
 
 impl fmt::Display for SvgError {
@@ -62,6 +73,9 @@ impl fmt::Display for SvgError {
             Self::InvalidSize(px) => write!(f, "SVG size {px} is outside 1..={MAX_RASTER_SIZE}"),
             Self::InvalidDocument(error) => write!(f, "invalid SVG: {error}"),
             Self::AllocationFailed => f.write_str("could not allocate the SVG raster"),
+            Self::SourceTooLarge(bytes) => write!(f, "SVG source ({bytes} bytes) exceeds the 4 MiB background limit"),
+            Self::QueueFull => f.write_str("SVG background work queue is full"),
+            Self::WorkerStopped => f.write_str("SVG background worker stopped"),
         }
     }
 }
@@ -139,6 +153,8 @@ impl<'a> Svg<'a> {
     /// Empty, non-finite or overflowing rectangles are ignored. Parsed documents
     /// are reused across raster sizes. Parsing and rasterization on a cache miss
     /// remain synchronous; cache bounds do not guarantee a frame-time limit.
+    /// On native targets, use [`crate::art::SvgLoader`] to move parsing and
+    /// rasterization off the UI thread.
     ///
     /// # Errors
     /// Returns [`SvgError`] when the document cannot be rasterized.

@@ -708,6 +708,7 @@ version = "0.2.1"
 dependencies = [
  "egui",
  "egui_commonmark",
+ "pulldown-cmark",
  "resvg",
 ]
 

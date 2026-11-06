@@ -5,6 +5,42 @@ use egui::{
     WidgetInfo, pos2, vec2,
 };
 
+/// A discrete slider widget over caller-owned state. Input normalization,
+/// keyboard support and accessibility match [`notches`].
+#[derive(Debug)]
+#[must_use = "add the slider to a Ui"]
+pub struct NotchedSlider<'a> {
+    index: &'a mut usize,
+    count: usize,
+    width: f32,
+    label: &'a str,
+}
+
+impl<'a> NotchedSlider<'a> {
+    /// A slider with `count` notches and a default width of 160 points.
+    pub fn new(index: &'a mut usize, count: usize) -> Self {
+        Self { index, count, width: 160.0, label: "" }
+    }
+
+    /// Set the width, with the same normalization as [`notches`].
+    pub fn width(mut self, width: f32) -> Self {
+        self.width = width;
+        self
+    }
+
+    /// Set an accessible name without adding visible text.
+    pub fn label(mut self, label: &'a str) -> Self {
+        self.label = label;
+        self
+    }
+}
+
+impl egui::Widget for NotchedSlider<'_> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        show(ui, self.width, self.count, self.index, self.label)
+    }
+}
+
 /// A slider over `count` notches (effort levels, say): an accent gel fills up
 /// to a round cap. Click or drag to pick a notch; `index` is clamped to the
 /// notches and updated in place. Arrow keys step by one; Home/End select the
@@ -15,12 +51,16 @@ use egui::{
 /// or [`notches_labeled`]. Ranges above 512 notches paint representative
 /// marks while retaining the full value range.
 pub fn notches(ui: &mut Ui, width: f32, count: usize, index: &mut usize) -> Response {
-    notches_labeled(ui, width, count, index, "")
+    ui.add(NotchedSlider::new(index, count).width(width))
 }
 
 /// A notched slider with an accessible name; the label is not painted.
 /// Input normalization, change reporting and keyboard behavior match [`notches`].
 pub fn notches_labeled(ui: &mut Ui, width: f32, count: usize, index: &mut usize, label: &str) -> Response {
+    ui.add(NotchedSlider::new(index, count).width(width).label(label))
+}
+
+fn show(ui: &mut Ui, width: f32, count: usize, index: &mut usize, label: &str) -> Response {
     let p = Theme::of(ui.ctx()).palette;
     let width = if width.is_finite() { width.max(16.0) } else { 160.0 };
     let editable = ui.is_enabled() && count > 1;

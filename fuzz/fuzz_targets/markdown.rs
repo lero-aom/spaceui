@@ -22,6 +22,7 @@ fuzz_target!(|data: &[u8]| {
         };
         ctx.run_ui(input, |ui| {
             markdown::render(ui, &text);
+            markdown::Markdown::new(&text).max_events(1024).show(ui);
             assert!(ui.min_rect().is_finite(), "CommonMark layout must remain finite");
         }).drop_without_applying_deltas();
         markdown::clear_cache(ctx);

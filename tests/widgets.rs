@@ -531,3 +531,50 @@ fn choice_responses_clamp_empty_indices_and_ignore_disabled_input() {
         assert_eq!((index, changes), (0, 0));
     }
 }
+
+#[test]
+fn input_builders_preserve_keyboard_change_reporting_and_disabled_state() {
+    let mut harness = accessible_harness((false, 0, false), |ui, state| {
+        state.2 |= ui.add(widgets::Switch::new(&mut state.0).label("Notifications")).changed();
+        state.2 |= ui.add(widgets::NotchedSlider::new(&mut state.1, 5).width(180.0).label("Effort")).changed();
+        ui.add_enabled(false, widgets::Switch::new(&mut false).label("Disabled"));
+    });
+    assert!(harness.get_by_label("Disabled").accesskit_node().is_disabled());
+    harness.get_by_label("Notifications").focus();
+    harness.run();
+    harness.key_press(Key::Space);
+    harness.run();
+    assert!(harness.state().0 && harness.state().2);
+    harness.state_mut().2 = false;
+    harness.get_by_label("Effort").focus();
+    harness.run();
+    harness.key_press(Key::End);
+    harness.run();
+    assert_eq!(harness.state().1, 4);
+    assert!(harness.state().2);
+}
+
+#[test]
+fn text_field_builder_keeps_helper_identity_when_siblings_move() {
+    let mut harness = accessible_harness((String::new(), false, false), |ui, state| {
+        if state.1 {
+            ui.label("Inserted sibling");
+        }
+        let response = if state.1 {
+            ui.add(widgets::TextField::new(&mut state.0).hint_text("Search").id_salt("search").width(200.0))
+        } else {
+            widgets::text_field_id(ui, "search", &mut state.0, "Search")
+        };
+        state.2 = response.has_focus();
+        response.accessible_name("Target search");
+    });
+    harness.get_by_label("Target search").focus();
+    harness.run();
+    assert!(harness.state().2);
+    harness.state_mut().1 = true;
+    harness.run();
+    assert!(harness.state().2, "switching to a builder preserves the helper's ID");
+    harness.event(Event::Text("M31".to_owned()));
+    harness.run();
+    assert_eq!(harness.state().0, "M31");
+}

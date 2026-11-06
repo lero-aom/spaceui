@@ -47,6 +47,10 @@ fn main() {
     profile("100-paragraph CommonMark frame", || {
         ctx.run_ui(egui::RawInput::default(), |ui| markdown::render(ui, &text)).drop_without_applying_deltas();
     });
+    let brackets = "[".repeat(16_384);
+    profile("16 KiB fragmented paragraph", || {
+        ctx.run_ui(egui::RawInput::default(), |ui| markdown::render(ui, &brackets)).drop_without_applying_deltas();
+    });
     for px in 16..400 {
         ctx.run_ui(egui::RawInput::default(), |ui| {
             Icon::Orbit.paint(

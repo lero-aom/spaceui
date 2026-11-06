@@ -6,7 +6,8 @@
 //! and popup helpers work. The legacy [`tabs`] and [`segmented`] helpers return
 //! a change flag; [`tabs_response`] and [`segmented_response`] also expose
 //! aggregate and individual choice responses. [`Button`] adds per-control
-//! configuration, and [`crate::theme::ControlMetrics`] sets shared sizing defaults.
+//! configuration; [`Switch`], [`NotchedSlider`] and [`TextField`] also implement
+//! [`egui::Widget`]. [`crate::theme::ControlMetrics`] sets shared sizing defaults.
 //! Install a [`Theme`](crate::Theme::install) before the first UI frame to
 //! configure the fonts and egui styles used by these controls.
 //!
@@ -78,13 +79,13 @@ pub use button::{Button, primary, secondary};
 #[cfg(feature = "svg")]
 pub use button::{icon_button, icon_button_labeled};
 pub use card::{caption, card, metric, plate, section};
-pub use field::{text_field, text_field_id};
+pub use field::{TextField, text_field, text_field_id};
 #[cfg(feature = "svg")]
 pub use pill::badge;
 pub use pill::{chip, dropdown, pill};
-pub use slider::{notches, notches_labeled};
+pub use slider::{NotchedSlider, notches, notches_labeled};
 pub use tabs::{ChoiceResponse, segmented, segmented_response, tabs, tabs_response};
-pub use toggle::{switch, switch_labeled};
+pub use toggle::{Switch, switch, switch_labeled};
 
 use crate::theme::Palette;
 use egui::Color32;
